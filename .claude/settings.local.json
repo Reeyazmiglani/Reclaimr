@@ -1,0 +1,30 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(streamlit run *)",
+      "Bash(curl -s http://localhost:8501)",
+      "Bash(python -c ' *)",
+      "Bash(start http://localhost:8501)",
+      "Bash(netstat -ano)",
+      "Bash(findstr :8501)",
+      "Bash(taskkill /F /PID 5296 /PID 17556)",
+      "Bash(taskkill /F /IM streamlit.exe)",
+      "Bash(curl -s -o nul -w \"%{http_code}\" http://localhost:8501)",
+      "Bash(del \"c:\\\\Users\\\\DELL\\\\OneDrive\\\\Pictures\\\\Documents\\\\Claude\\\\Projects\\\\ERP\\\\pages\\\\home.py\")",
+      "Bash(Remove-Item \"c:\\\\Users\\\\DELL\\\\OneDrive\\\\Pictures\\\\Documents\\\\Claude\\\\Projects\\\\ERP\\\\pages\\\\home.py\")",
+      "PowerShell(Start-Sleep -Seconds 3; try { $r = Invoke-WebRequest http://localhost:8501 -TimeoutSec 5; $r.StatusCode } catch { \"not up\" })",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:8501)",
+      "PowerShell(Get-Process streamlit -ErrorAction SilentlyContinue)",
+      "PowerShell(Get-Process python -ErrorAction SilentlyContinue)",
+      "PowerShell(Set-Location \"c:\\\\Users\\\\DELL\\\\OneDrive\\\\Pictures\\\\Documents\\\\Claude\\\\Projects\\\\ERP\"; $env:PYTHONPATH = \".\"; Start-Process -FilePath \"streamlit\" -ArgumentList \"run\", \"app.py\", \"--server.headless\", \"true\" -PassThru | Select-Object Id)",
+      "PowerShell(Get-Process | Where-Object {$_.Name -match \"python|streamlit\"} | Stop-Process -Force; Write-Output \"all killed\")",
+      "PowerShell(Set-Location \"c:\\\\Users\\\\DELL\\\\OneDrive\\\\Pictures\\\\Documents\\\\Claude\\\\Projects\\\\ERP\"; Start-Process -FilePath \"cmd.exe\" -ArgumentList \"/c streamlit run app.py\" -WindowStyle Normal; Start-Sleep -Seconds 6; try { \\(Invoke-WebRequest http://localhost:8501 -TimeoutSec 5\\).StatusCode } catch { \"not up\" })",
+      "Bash(python -m streamlit run app.py --server.headless true)",
+      "PowerShell(Get-Process | Where-Object {$_.Name -match \"python|streamlit\"} | Stop-Process -Force -ErrorAction SilentlyContinue; Start-Sleep -Seconds 1; Write-Output \"killed\")",
+      "Bash(python -c \"import sqlite3; conn=sqlite3.connect\\('db/erp.db'\\); print\\([d[1] for d in conn.execute\\('PRAGMA table_info\\(orders\\)'\\).fetchall\\(\\)]\\)\")",
+      "Bash(python -c \"import plotly; print\\(plotly.__version__\\)\")",
+      "PowerShell(Get-Process | Where-Object {$_.Name -match \"python|streamlit\"} | Stop-Process -Force -ErrorAction SilentlyContinue; Start-Sleep -Seconds 1; Write-Output \"done\")",
+      "Bash(python -c \"import pandas; print\\(pandas.__version__\\)\")"
+    ]
+  }
+}
