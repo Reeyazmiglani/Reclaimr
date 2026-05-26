@@ -21,7 +21,8 @@ _HDRS = ["ID", "Co.", "Customer", "Product", "Qty", "Rate", "Dispatch", "Status"
 
 
 def render_orders_page(conn):
-    st.header("Order Entry")
+    st.header("Orders")
+    st.caption("Track every order from the moment it comes in to the day it ships. Nothing gets forgotten, no customer goes without an update.")
 
     # ── Handle action params ─────────────────────────────────────────────────────
     params = st.query_params
@@ -194,12 +195,12 @@ def render_orders_page(conn):
                     ),
                 )
                 conn.commit()
-                st.success("Order saved successfully.")
+                st.success("Order saved.")
 
     # ══════════════════════════════════════════════════════════════════════════════
     # ORDERS TABLE
     # ══════════════════════════════════════════════════════════════════════════════
-    st.subheader("Existing Orders")
+    st.subheader("Order Register")
 
     # ── Filter bar ───────────────────────────────────────────────────────────────
     fa, fb, fc, fd = st.columns([2, 2, 1.5, 1.5])
@@ -250,7 +251,7 @@ def render_orders_page(conn):
     total  = conn.execute("SELECT COUNT(*) FROM orders").fetchone()[0]
 
     if not orders:
-        st.info("No orders match the current filters." if total > 0 else "No orders have been recorded yet.")
+        st.info("No orders match — adjust the filters above." if total > 0 else "No orders yet. Use the form above to record the first one.")
     else:
         if len(orders) < total:
             st.caption(f"Showing {len(orders)} of {total} orders — some filtered out")
@@ -333,11 +334,11 @@ def render_orders_page(conn):
 
     st.divider()
 
-    if st.button("Clear all", type="secondary"):
+    if st.button("Delete all orders", type="secondary"):
         st.session_state["confirm_clear"] = True
 
     if st.session_state.get("confirm_clear"):
-        st.warning("This will permanently delete all orders. Are you sure?")
+        st.warning("This will permanently delete every order in the system. This cannot be undone.")
         col_yes, col_no, _ = st.columns([1, 1, 6])
         with col_yes:
             if st.button("Yes, delete all", type="primary"):

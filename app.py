@@ -11,13 +11,15 @@ st.markdown("<style>[data-testid='stSidebarNav']{display:none!important}</style>
             unsafe_allow_html=True)
 
 # ── Navigation ─────────────────────────────────────────────────────────────────
-PAGE_KEYS  = ["Home","Orders","Procurement","Production","Exports"]
+PAGE_KEYS  = ["Home","Orders","Procurement","Production","Exports","Financials"]
 PAGE_FILES = {"Orders":Path("pages")/"1_orders.py",
               "Procurement":Path("pages")/"2_procurement.py",
               "Production":Path("pages")/"3_production.py",
-              "Exports":Path("pages")/"4_exports.py"}
+              "Exports":Path("pages")/"4_exports.py",
+              "Financials":Path("pages")/"5_financials.py"}
 PAGE_FN    = {"Orders":"render_orders_page","Procurement":"render_procurement_page",
-              "Production":"render_production_page","Exports":"render_exports_page"}
+              "Production":"render_production_page","Exports":"render_exports_page",
+              "Financials":"render_financials_page"}
 
 @st.cache_resource
 def get_conn():
@@ -277,7 +279,7 @@ pend = conn.execute("SELECT COUNT(*) FROM orders WHERE status IN ('received','in
 # ══════════════════════════════════════════════════════════════════════════════
 # TABS
 # ══════════════════════════════════════════════════════════════════════════════
-tab1, tab2, tab3 = st.tabs(["📊 Overview — Both Companies", "🏭 Rwox", "🏪 Elastohorse"])
+tab1, tab2, tab3 = st.tabs(["📊 Both Companies", "🏭 Rwox", "🏪 Elastohorse"])
 
 # ─────────────────────────────────────────────────────────────────────────────
 # TAB 1 — OVERVIEW
@@ -308,7 +310,7 @@ with tab1:
         unsafe_allow_html=True)
 
     if compare:
-        st.caption("Solid bars = this period · Faded bars = previous period")
+        st.caption("Solid = current period  ·  Faded = prior period")
     st.divider()
 
     _op = ord_p if compare else pd.DataFrame()
@@ -333,7 +335,8 @@ with tab1:
             st.plotly_chart(pie, use_container_width=True)
 
     st.divider()
-    st.subheader("⚠️ Alerts")
+    st.subheader("Alerts")
+    st.caption("Issues that need action today — overdue orders, stagnant jobs, and procurement cost spikes.")
 
     overdue = qdf(
         "SELECT o.id, c.name AS company, o.customer_name AS customer, o.product, "
@@ -360,16 +363,16 @@ with tab1:
                                    "Curr ₹":f"{cp2[item]:,.2f}","Spike":f"+{pct_chg:.1f}%"})
 
     if overdue.empty and stagnant.empty and not spikes:
-        st.success("✅ No alerts — everything is on track.")
+        st.success("✅ All orders current, no stagnant jobs, no procurement cost spikes.")
     else:
         if not overdue.empty:
-            st.error(f"🔴 **{len(overdue)} overdue order(s)** — dispatch date passed")
+            st.error(f"🔴 **{len(overdue)} {'order' if len(overdue)==1 else 'orders'} past dispatch date** — these need immediate attention")
             st.dataframe(overdue, use_container_width=True, hide_index=True)
         if not stagnant.empty:
-            st.warning(f"🟡 **{len(stagnant)} stagnant order(s)** — in 'received' for 7+ days")
+            st.warning(f"🟡 **{len(stagnant)} {'order' if len(stagnant)==1 else 'orders'} sitting in 'received' for 7+ days** — check whether production has started")
             st.dataframe(stagnant, use_container_width=True, hide_index=True)
         if spikes:
-            st.warning(f"💸 **{len(spikes)} material price spike(s)** — >5% increase")
+            st.warning(f"💸 **{len(spikes)} {'material' if len(spikes)==1 else 'materials'} with price increases above 5%** — review vendor quotes before the next purchase")
             st.dataframe(pd.DataFrame(spikes), use_container_width=True, hide_index=True)
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -399,7 +402,7 @@ with tab2:
                 f"<tr>{badges2}</tr></table>", unsafe_allow_html=True)
 
     if compare:
-        st.caption("Solid bars = this period · Faded bars = previous period")
+        st.caption("Solid = current period  ·  Faded = prior period")
     st.divider()
 
     _rp = rp if compare else pd.DataFrame()
@@ -477,7 +480,7 @@ with tab3:
                 f"<tr>{badges3}</tr></table>", unsafe_allow_html=True)
 
     if compare:
-        st.caption("Solid bars = this period · Faded bars = previous period")
+        st.caption("Solid = current period  ·  Faded = prior period")
     st.divider()
 
     _ep = ep if compare else pd.DataFrame()
@@ -492,4 +495,4 @@ with tab3:
             use_container_width=True)
 
     if eo.empty:
-        st.info("No Elastohorse orders in this period.")
+        st.info("No Elastohorse orders in the selected period. Add one from the Orders page.")

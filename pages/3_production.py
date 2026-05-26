@@ -59,7 +59,8 @@ def _run_time_label(start, end):
 
 
 def render_production_page(conn):
-    st.header("Production — Rwox")
+    st.header("Production")
+    st.caption("Daily production logs give you visibility into output, quality, and whether committed delivery dates are still on track.")
 
     rwox = conn.execute("SELECT id FROM companies WHERE name = 'Rwox'").fetchone()
     if not rwox:
@@ -91,9 +92,9 @@ def render_production_page(conn):
         (company_id,),
     ).fetchone()
     c1, c2, c3 = st.columns(3)
-    c1.metric("Kg produced this month", f"{row[0]:,.1f}")
-    c2.metric("1kg cartons this month", int(row[1]))
-    c3.metric("5kg cartons this month", int(row[2]))
+    c1.metric("Output This Month (kg)", f"{row[0]:,.1f}")
+    c2.metric("1 kg Cartons Packed", int(row[1]))
+    c3.metric("5 kg Cartons Packed", int(row[2]))
     st.divider()
 
     # ── Edit form ──────────────────────────────────────────────────────────────
@@ -210,7 +211,7 @@ def render_production_page(conn):
             st.divider()
 
     # ── New entry ──────────────────────────────────────────────────────────────
-    st.subheader("New Production Entry")
+    st.subheader("Log a New Run")
 
     # Required fields
     fd, fb = st.columns(2)
@@ -232,7 +233,7 @@ def render_production_page(conn):
     st.text_input("Output kg — auto (sum × 0.9)", value=str(output_kg), disabled=True, key="p_out")
 
     # Optional: machine timing
-    with st.expander("Machine timing (optional)"):
+    with st.expander("Machine timing (optional — captures run duration)"):
         fs1, fs2 = st.columns(2)
         with fs1:
             use_start = st.checkbox("Set start time", key="p_use_start")
@@ -250,7 +251,7 @@ def render_production_page(conn):
                 st.text_input("Total run time", value=label + overnight, disabled=True, key="p_rt")
 
     # Optional: bottles & cartons
-    with st.expander("Bottles & cartons (optional)"):
+    with st.expander("Bottles & cartons (optional — auto-calculates cartons at 20 per box)"):
         fb1, fb5 = st.columns(2)
         with fb1:
             bottles_1kg = st.number_input("1kg bottles filled", min_value=0, value=0, step=1, key="p_b1")
@@ -340,12 +341,13 @@ def render_production_page(conn):
             )
             conn.commit()
             st.session_state["temp_row_ids"] = []
-            st.success("Production entry saved.")
+            st.success("Production run logged.")
             st.rerun()
 
     # ── Production log table ───────────────────────────────────────────────────
     st.divider()
     st.subheader("Production Log")
+    st.caption("Every run on record. Filter by batch or date range to investigate output or quality trends.")
 
     # Filter bar
     lfa, lfb, lfc, lfd = st.columns([2, 1.8, 1.8, 1])
@@ -380,7 +382,7 @@ def render_production_page(conn):
     logs = conn.execute(lsql, lqp).fetchall()
 
     if not logs:
-        st.info("No production entries match the current filters.")
+        st.info("No entries match — adjust the filters above.")
         return
 
     rows_html = ""

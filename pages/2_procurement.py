@@ -30,7 +30,8 @@ TABLE_CSS = (
 
 
 def render_procurement_page(conn):
-    st.header("Procurement — Rwox")
+    st.header("Procurement")
+    st.caption("Log purchases as they happen and build a price history that tells you when a vendor is overcharging.")
 
     rwox = conn.execute("SELECT id FROM companies WHERE name = 'Rwox'").fetchone()
     if not rwox:
@@ -150,10 +151,10 @@ def render_procurement_page(conn):
                  purchase_date.isoformat(), notes.strip() or None),
             )
             conn.commit()
-            st.success("Entry saved.")
+            st.success("Purchase recorded.")
 
     # ── Records table ──────────────────────────────────────────────────────────
-    st.subheader("Procurement Records")
+    st.subheader("Purchase Records")
 
     # Filter bar
     pfa, pfb, pfc, pfd = st.columns([2, 2, 1.8, 1.8])
@@ -190,7 +191,7 @@ def render_procurement_page(conn):
     entries = conn.execute(psql, pqp).fetchall()
 
     if not entries:
-        st.info("No procurement records match the current filters.")
+        st.info("No records match — adjust the filters above.")
         return
 
     rows_html = "".join(
@@ -237,6 +238,7 @@ def render_procurement_page(conn):
 
     # ── Price history by vendor ────────────────────────────────────────────────
     st.subheader("Price History by Vendor")
+    st.caption("Last 5 purchases per vendor. Use this to spot price drift before it hits your margins.")
     vendors = conn.execute(
         "SELECT DISTINCT supplier FROM procurement "
         "WHERE company_id = ? AND supplier IS NOT NULL ORDER BY supplier",

@@ -56,6 +56,7 @@ def _calc_inr(rate, qty, rt_label, xr):
 
 def render_exports_page(conn):
     st.header("Exports")
+    st.caption("International orders tracked separately — currencies, shipping terms, and margins all in one place.")
     this_month = date.today().strftime("%Y-%m")
 
     # ── Handle query params ────────────────────────────────────────────────────
@@ -84,7 +85,7 @@ def render_exports_page(conn):
 
     sm1, sm2 = st.columns(2)
     sm1.metric("Export Revenue This Month", _inr(rev_month), help=f"₹{rev_month:,.0f}")
-    sm2.metric("Export Orders This Month",   ord_month)
+    sm2.metric("Orders This Month",   ord_month)
 
     # Breakdown tables side by side
     bc1, bc2 = st.columns(2)
@@ -198,6 +199,7 @@ def render_exports_page(conn):
 
     # ── New export order form (regular widgets → real-time INR calc) ───────────
     st.subheader("New Export Order")
+    st.caption("INR equivalent is calculated automatically from the rate and exchange rate you enter.")
 
     def on_curr_change():
         curr = st.session_state.get("exp_curr", "USD")
@@ -263,12 +265,12 @@ def render_exports_page(conn):
                  order_date.isoformat(), dispatch_date.isoformat(),
                  status, shipping_terms, notes.strip() or None))
             conn.commit()
-            st.success("Export order saved.")
+            st.success("Export order recorded.")
             st.rerun()
 
     # ── Exports table ──────────────────────────────────────────────────────────
     st.divider()
-    st.subheader("Export Orders")
+    st.subheader("Export Register")
 
     # Filter bar
     efa, efb, efc, efd = st.columns([2, 2, 1.5, 1.5])
@@ -320,7 +322,7 @@ def render_exports_page(conn):
     exports = conn.execute(esql, eqp).fetchall()
 
     if not exports:
-        st.info("No export orders match the current filters.")
+        st.info("No exports match — adjust the filters above.")
         return
 
     rows_html = ""
@@ -369,6 +371,7 @@ def render_exports_page(conn):
     pending_exp = [ex for ex in exports if ex["status"] != "dispatched"]
     if pending_exp:
         st.markdown("##### Mark as Dispatched")
+        st.caption("These orders are still open. Confirm dispatch once the shipment has left.")
         for ex in pending_exp:
             ea, eb, ec = st.columns([0.6, 5, 1.8])
             ea.markdown(f"**#{ex['id']}**")
