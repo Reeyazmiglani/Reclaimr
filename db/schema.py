@@ -103,6 +103,47 @@ def create_tables(conn: sqlite3.Connection) -> None:
             FOREIGN KEY (order_id) REFERENCES orders(id)
         );
 
+        CREATE TABLE IF NOT EXISTS batch_allocations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            batch_id INTEGER NOT NULL,
+            order_id INTEGER NOT NULL,
+            allocated_kg REAL NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+            FOREIGN KEY (batch_id) REFERENCES production_logs(id),
+            FOREIGN KEY (order_id) REFERENCES orders(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS batch_complaints (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            batch_id INTEGER NOT NULL,
+            order_id INTEGER,
+            customer_name TEXT,
+            date TEXT NOT NULL,
+            issue_type TEXT NOT NULL,
+            description TEXT NOT NULL,
+            quantity_affected REAL,
+            physical_return INTEGER NOT NULL DEFAULT 0,
+            quantity_returned REAL,
+            initial_action TEXT NOT NULL,
+            logged_by TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'open',
+            created_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+            FOREIGN KEY (batch_id) REFERENCES production_logs(id),
+            FOREIGN KEY (order_id) REFERENCES orders(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS batch_complaint_updates (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            complaint_id INTEGER NOT NULL,
+            date TEXT NOT NULL,
+            update_description TEXT NOT NULL,
+            action_taken TEXT NOT NULL,
+            status TEXT NOT NULL,
+            logged_by TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+            FOREIGN KEY (complaint_id) REFERENCES batch_complaints(id)
+        );
+
         CREATE TABLE IF NOT EXISTS financial_snapshots (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             company_id INTEGER NOT NULL,
@@ -173,6 +214,7 @@ def migrate_db(conn: sqlite3.Connection) -> None:
         "ALTER TABLE procurement ADD COLUMN quantity_unit TEXT NOT NULL DEFAULT 'kg'",
         "ALTER TABLE procurement ADD COLUMN notes TEXT",
         "ALTER TABLE procurement ADD COLUMN price_type TEXT NOT NULL DEFAULT 'per_unit'",
+        "ALTER TABLE orders ADD COLUMN batch_reference TEXT",
     ]:
         try:
             conn.execute(sql)

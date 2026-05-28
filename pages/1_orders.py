@@ -1,5 +1,5 @@
 import streamlit as st
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 from db.schema import init_db
 
@@ -11,16 +11,51 @@ def _get_conn():
 COMPANIES = ["Rwox", "Elastohorse"]
 ORDER_STATUSES = ["received", "in_production", "ready", "dispatched", "cancelled"]
 UNITS = ["kg", "tonnes", "litres", "units", "bags"]
-PRODUCTS = ["Antiordour", "Elastomax HT reclaiming agent", "Pine tar", "Other"]
+PRODUCTS = ["Anti Odour", "Elastomax HT reclaiming agent", "Pine tar", "Other"]
 RATE_TYPE_OPTIONS = ["Per Unit", "Overall Total"]
 RATE_TYPE_TO_DB = {"Per Unit": "per_unit", "Overall Total": "overall"}
 RATE_TYPE_TO_LABEL = {"per_unit": "Per Unit", "overall": "Overall Total"}
 
-_COLS = [0.4, 0.9, 1.8, 1.6, 0.9, 1.2, 1.2, 1.8, 0.85, 0.85]
-_HDRS = ["ID", "Co.", "Customer", "Product", "Qty", "Rate", "Dispatch", "Status", "", ""]
+_COLS = [0.35, 0.65, 1.5, 1.4, 0.8, 1.0, 1.0, 1.1, 1.6, 0.7, 0.7]
+_HDRS = ["ID", "Co.", "Customer", "Product", "Qty", "Rate", "Dispatch", "Batch Ref", "Status", "", ""]
+
+
+def _prod_batch_options(conn):
+    """Returns (label_list, label→batch_ref dict) from production_logs."""
+    rows = conn.execute(
+        "SELECT batch_ref, date, output_kg FROM production_logs ORDER BY date DESC, id DESC"
+    ).fetchall()
+    labels = []
+    label_to_ref = {}
+    for r in rows:
+        try:
+            date_fmt = datetime.strptime(r["date"], "%Y-%m-%d").strftime("%d %b %Y")
+        except Exception:
+            date_fmt = r["date"]
+        label = f"{r['batch_ref']} | {date_fmt} | {r['output_kg']:.0f} kg"
+        if label not in label_to_ref:
+            labels.append(label)
+            label_to_ref[label] = r["batch_ref"]
+    return labels, label_to_ref
+
+
+def _resolve_batch_ref(sel, manual, label_to_ref):
+    """Convert form selection + manual input to the batch_reference value to save."""
+    if sel == "Not yet produced / Enter manually":
+        return manual.strip() or None
+    if sel == "— Not assigned —":
+        return None
+    return label_to_ref.get(sel)
 
 
 def render_orders_page(conn):
+    # Ensure batch_reference column exists on cached connections
+    try:
+        conn.execute("ALTER TABLE orders ADD COLUMN batch_reference TEXT")
+        conn.commit()
+    except Exception:
+        pass
+
     st.header("Orders")
     st.caption("Track every order from the moment it comes in to the day it ships. Nothing gets forgotten, no customer goes without an update.")
 
@@ -54,6 +89,21 @@ def render_orders_page(conn):
 
         if order:
             st.subheader(f"Editing Order #{editing_id}")
+
+            e_b_labels, e_b_label_to_ref = _prod_batch_options(conn)
+            e_batch_opts = ["— Not assigned —"] + e_b_labels + ["Not yet produced / Enter manually"]
+            existing_batch = order["batch_reference"] or ""
+            e_default_label = next((l for l, r in e_b_label_to_ref.items() if r == existing_batch), None)
+            if e_default_label:
+                e_batch_default_idx = e_batch_opts.index(e_default_label)
+                e_batch_manual_default = ""
+            elif existing_batch:
+                e_batch_default_idx = e_batch_opts.index("Not yet produced / Enter manually")
+                e_batch_manual_default = existing_batch
+            else:
+                e_batch_default_idx = 0
+                e_batch_manual_default = ""
+
             with st.form("edit_form"):
                 company = st.selectbox(
                     "Company", COMPANIES,
@@ -87,6 +137,19 @@ def render_orders_page(conn):
                     "Expected dispatch date",
                     value=date.fromisoformat(order["expected_dispatch_date"]),
                 )
+
+                st.markdown("**Batch Reference (optional)**")
+                e_batch_sel = st.selectbox(
+                    "Select batch", e_batch_opts, index=e_batch_default_idx
+                )
+                e_batch_manual = st.text_input(
+                    "Manual batch ref",
+                    value=e_batch_manual_default,
+                    placeholder="e.g. Batch-001",
+                    help="Used when 'Not yet produced / Enter manually' is selected above",
+                )
+                st.caption("Once production is done, go to Production and log the batch to keep records complete.")
+
                 e_status = st.selectbox(
                     "Status",
                     ORDER_STATUSES,
@@ -115,15 +178,16 @@ def render_orders_page(conn):
                     company_row = conn.execute(
                         "SELECT id FROM companies WHERE name = ?", (company,)
                     ).fetchone()
+                    new_batch_ref = _resolve_batch_ref(e_batch_sel, e_batch_manual, e_b_label_to_ref)
                     conn.execute(
                         "UPDATE orders SET company_id=?, customer_name=?, product=?, "
                         "quantity=?, quantity_unit=?, rate=?, rate_type=?, "
-                        "expected_dispatch_date=?, status=?, transport_via=?, dispatch_time=?, "
-                        "delivery_deadline=?, notes=? WHERE id=?",
+                        "expected_dispatch_date=?, batch_reference=?, status=?, "
+                        "transport_via=?, dispatch_time=?, delivery_deadline=?, notes=? WHERE id=?",
                         (
                             company_row["id"], customer_name.strip(), product.strip(),
                             quantity, quantity_unit, rate, RATE_TYPE_TO_DB[rate_type_label],
-                            expected_dispatch_date.isoformat(), e_status,
+                            expected_dispatch_date.isoformat(), new_batch_ref, e_status,
                             e_transport.strip() or None, e_dispatch_time.strip() or None,
                             e_delivery_deadline.strip() or None, e_notes.strip() or None,
                             editing_id,
@@ -140,6 +204,9 @@ def render_orders_page(conn):
             st.divider()
 
     # ── New order form ───────────────────────────────────────────────────────────
+    b_labels, b_label_to_ref = _prod_batch_options(conn)
+    batch_opts = ["— Not assigned —"] + b_labels + ["Not yet produced / Enter manually"]
+
     with st.form("order_form"):
         company = st.selectbox("Company", COMPANIES)
         customer_name = st.text_input("Customer name")
@@ -159,6 +226,15 @@ def render_orders_page(conn):
             rate_type_label = st.selectbox("Rate type", RATE_TYPE_OPTIONS)
 
         expected_dispatch_date = st.date_input("Expected dispatch date", value=date.today())
+
+        st.markdown("**Batch Reference (optional)**")
+        batch_sel = st.selectbox("Select batch", batch_opts)
+        batch_manual = st.text_input(
+            "Manual batch ref",
+            placeholder="e.g. Batch-001",
+            help="Used when 'Not yet produced / Enter manually' is selected above",
+        )
+        st.caption("Once production is done, go to Production and log the batch to keep records complete.")
 
         st.markdown("**Dispatch & Transport (optional)**")
         dv1, dv2 = st.columns(2)
@@ -181,15 +257,16 @@ def render_orders_page(conn):
             if company_row is None:
                 st.error(f"Company '{company}' not found in the database.")
             else:
+                batch_ref_val = _resolve_batch_ref(batch_sel, batch_manual, b_label_to_ref)
                 conn.execute(
                     "INSERT INTO orders (company_id, customer_name, product, quantity, "
-                    "quantity_unit, rate, rate_type, expected_dispatch_date, "
+                    "quantity_unit, rate, rate_type, expected_dispatch_date, batch_reference, "
                     "transport_via, dispatch_time, delivery_deadline, notes) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     (
                         company_row["id"], customer_name.strip(), product.strip(),
                         quantity, quantity_unit, rate, RATE_TYPE_TO_DB[rate_type_label],
-                        expected_dispatch_date.isoformat(),
+                        expected_dispatch_date.isoformat(), batch_ref_val,
                         transport_via.strip() or None, dispatch_time.strip() or None,
                         delivery_deadline.strip() or None, notes.strip() or None,
                     ),
@@ -229,7 +306,8 @@ def render_orders_page(conn):
     # ── Build filtered query ─────────────────────────────────────────────────────
     sql = (
         "SELECT o.id, c.name AS company, o.customer_name, o.product, "
-        "o.quantity, o.quantity_unit, o.rate, o.rate_type, o.expected_dispatch_date, o.status "
+        "o.quantity, o.quantity_unit, o.rate, o.rate_type, o.expected_dispatch_date, "
+        "o.batch_reference, o.status "
         "FROM orders o JOIN companies c ON o.company_id = c.id WHERE 1=1"
     )
     qp = []
@@ -258,10 +336,9 @@ def render_orders_page(conn):
 
         today_str = date.today().isoformat()
 
-        # Table header
         hdr = st.columns(_COLS)
-        for c, lbl in zip(hdr, _HDRS):
-            c.markdown(
+        for col, lbl in zip(hdr, _HDRS):
+            col.markdown(
                 f"<span style='font-size:12px;color:#888;text-transform:uppercase;"
                 f"letter-spacing:0.04em'>{lbl}</span>",
                 unsafe_allow_html=True,
@@ -269,7 +346,6 @@ def render_orders_page(conn):
         st.markdown("<div style='border-bottom:1px solid #333;margin:2px 0 4px'></div>",
                     unsafe_allow_html=True)
 
-        # One row per order
         for o in orders:
             overdue = (o["expected_dispatch_date"] < today_str
                        and o["status"] not in ("dispatched", "cancelled"))
@@ -288,18 +364,23 @@ def render_orders_page(conn):
                 unsafe_allow_html=True,
             )
             r[6].markdown(f"<div style='{cell}'>{o['expected_dispatch_date']}</div>", unsafe_allow_html=True)
+            batch_display = o["batch_reference"] or "—"
+            r[7].markdown(
+                f"<div style='{cell};color:#aaa;font-size:13px'>{batch_display}</div>",
+                unsafe_allow_html=True,
+            )
 
             cur_idx  = ORDER_STATUSES.index(o["status"]) if o["status"] in ORDER_STATUSES else 0
-            new_status = r[7].selectbox(
+            new_status = r[8].selectbox(
                 "", ORDER_STATUSES, index=cur_idx,
                 key=f"s_{o['id']}", label_visibility="collapsed",
             )
 
-            if r[8].button("✏", key=f"e_{o['id']}", use_container_width=True, help="Edit"):
+            if r[9].button("✏", key=f"e_{o['id']}", use_container_width=True, help="Edit"):
                 st.session_state["editing_order_id"] = o["id"]
                 st.rerun()
 
-            if r[9].button("✕", key=f"d_{o['id']}", use_container_width=True, help="Delete"):
+            if r[10].button("✕", key=f"d_{o['id']}", use_container_width=True, help="Delete"):
                 st.session_state["confirm_delete_id"] = o["id"]
                 st.rerun()
 

@@ -11,15 +11,16 @@ st.markdown("<style>[data-testid='stSidebarNav']{display:none!important}</style>
             unsafe_allow_html=True)
 
 # ── Navigation ─────────────────────────────────────────────────────────────────
-PAGE_KEYS  = ["Home","Orders","Procurement","Production","Exports","Financials"]
+PAGE_KEYS  = ["Home","Orders","Procurement","Production","Exports","Financials","Forecasting"]
 PAGE_FILES = {"Orders":Path("pages")/"1_orders.py",
               "Procurement":Path("pages")/"2_procurement.py",
               "Production":Path("pages")/"3_production.py",
               "Exports":Path("pages")/"4_exports.py",
-              "Financials":Path("pages")/"5_financials.py"}
+              "Financials":Path("pages")/"5_financials.py",
+              "Forecasting":Path("pages")/"6_forecasting.py"}
 PAGE_FN    = {"Orders":"render_orders_page","Procurement":"render_procurement_page",
               "Production":"render_production_page","Exports":"render_exports_page",
-              "Financials":"render_financials_page"}
+              "Financials":"render_financials_page","Forecasting":"render_forecasting_page"}
 
 @st.cache_resource
 def get_conn():
@@ -362,9 +363,45 @@ with tab1:
                     spikes.append({"Material":item,"Prev ₹":f"{pp2[item]:,.2f}",
                                    "Curr ₹":f"{cp2[item]:,.2f}","Spike":f"+{pct_chg:.1f}%"})
 
-    if overdue.empty and stagnant.empty and not spikes:
-        st.success("✅ All orders current, no stagnant jobs, no procurement cost spikes.")
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS batch_complaints (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, batch_id INTEGER NOT NULL,
+            order_id INTEGER, customer_name TEXT, date TEXT NOT NULL,
+            issue_type TEXT NOT NULL, description TEXT NOT NULL,
+            quantity_affected REAL, physical_return INTEGER NOT NULL DEFAULT 0,
+            quantity_returned REAL, initial_action TEXT NOT NULL,
+            logged_by TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'open',
+            created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+        );
+        CREATE TABLE IF NOT EXISTS batch_allocations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, batch_id INTEGER NOT NULL,
+            order_id INTEGER NOT NULL, allocated_kg REAL NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+        );
+    """)
+    conn.commit()
+
+    unresolved_complaints = conn.execute(
+        "SELECT COUNT(*) FROM batch_complaints WHERE status != 'resolved'"
+    ).fetchone()[0]
+
+    over_alloc = qdf(
+        "SELECT pl.batch_ref, pl.date, pl.output_kg, SUM(ba.allocated_kg) AS total_allocated "
+        "FROM batch_allocations ba "
+        "JOIN production_logs pl ON ba.batch_id = pl.id "
+        "GROUP BY ba.batch_id "
+        "HAVING SUM(ba.allocated_kg) > pl.output_kg "
+        "ORDER BY pl.date DESC")
+
+    all_clear = overdue.empty and stagnant.empty and not spikes and unresolved_complaints == 0 and over_alloc.empty
+    if all_clear:
+        st.success("✅ All orders current, no stagnant jobs, no procurement cost spikes, no open complaints.")
     else:
+        if unresolved_complaints > 0:
+            st.error(f"🔴 **{unresolved_complaints} unresolved {'complaint' if unresolved_complaints==1 else 'complaints'}** — go to Production → Complaints & Returns to action them")
+        if not over_alloc.empty:
+            st.error(f"🔴 **{len(over_alloc)} {'batch' if len(over_alloc)==1 else 'batches'} over-allocated** — allocated kg exceeds produced kg")
+            st.dataframe(over_alloc, use_container_width=True, hide_index=True)
         if not overdue.empty:
             st.error(f"🔴 **{len(overdue)} {'order' if len(overdue)==1 else 'orders'} past dispatch date** — these need immediate attention")
             st.dataframe(overdue, use_container_width=True, hide_index=True)
