@@ -11,16 +11,20 @@ st.markdown("<style>[data-testid='stSidebarNav']{display:none!important}</style>
             unsafe_allow_html=True)
 
 # ── Navigation ─────────────────────────────────────────────────────────────────
-PAGE_KEYS  = ["Home","Orders","Procurement","Production","Exports","Financials","Forecasting"]
-PAGE_FILES = {"Orders":Path("pages")/"1_orders.py",
+PAGE_KEYS  = ["Home","Overview & Updates","Orders","Procurement","Production","Exports","Financials","Forecasting","Credit"]
+PAGE_FILES = {"Overview & Updates":Path("pages")/"8_intelligence.py",
+              "Orders":Path("pages")/"1_orders.py",
               "Procurement":Path("pages")/"2_procurement.py",
               "Production":Path("pages")/"3_production.py",
               "Exports":Path("pages")/"4_exports.py",
               "Financials":Path("pages")/"5_financials.py",
-              "Forecasting":Path("pages")/"6_forecasting.py"}
-PAGE_FN    = {"Orders":"render_orders_page","Procurement":"render_procurement_page",
+              "Forecasting":Path("pages")/"6_forecasting.py",
+              "Credit":Path("pages")/"7_credit.py"}
+PAGE_FN    = {"Overview & Updates":"render_intelligence_page",
+              "Orders":"render_orders_page","Procurement":"render_procurement_page",
               "Production":"render_production_page","Exports":"render_exports_page",
-              "Financials":"render_financials_page","Forecasting":"render_forecasting_page"}
+              "Financials":"render_financials_page","Forecasting":"render_forecasting_page",
+              "Credit":"render_credit_page"}
 
 @st.cache_resource
 def get_conn():
@@ -363,6 +367,27 @@ with tab1:
                     spikes.append({"Material":item,"Prev ₹":f"{pp2[item]:,.2f}",
                                    "Curr ₹":f"{cp2[item]:,.2f}","Spike":f"+{pct_chg:.1f}%"})
 
+    # Migrate receivables from old Financials schema if needed
+    _rec_cols = [r[1] for r in conn.execute("PRAGMA table_info(receivables)").fetchall()]
+    if _rec_cols and "party_name" in _rec_cols:
+        conn.executescript("""
+            ALTER TABLE receivables RENAME TO receivables_old;
+            CREATE TABLE receivables (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                customer_name TEXT NOT NULL,
+                company TEXT NOT NULL DEFAULT '',
+                reference TEXT, amount REAL NOT NULL, date TEXT NOT NULL,
+                notes TEXT, status TEXT NOT NULL DEFAULT 'outstanding',
+                created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+            );
+            INSERT INTO receivables (id, customer_name, company, reference, amount, date, notes, status, created_at)
+            SELECT r.id, r.party_name, COALESCE(c.name,''), NULL,
+                   r.amount, r.as_of_date, r.notes, r.status, r.created_at
+            FROM receivables_old r LEFT JOIN companies c ON r.company_id = c.id;
+            DROP TABLE receivables_old;
+        """)
+        conn.commit()
+
     conn.executescript("""
         CREATE TABLE IF NOT EXISTS batch_complaints (
             id INTEGER PRIMARY KEY AUTOINCREMENT, batch_id INTEGER NOT NULL,
@@ -377,6 +402,27 @@ with tab1:
             id INTEGER PRIMARY KEY AUTOINCREMENT, batch_id INTEGER NOT NULL,
             order_id INTEGER NOT NULL, allocated_kg REAL NOT NULL,
             created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+        );
+        CREATE TABLE IF NOT EXISTS receivables (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            customer_name TEXT NOT NULL,
+            company TEXT NOT NULL DEFAULT '',
+            reference TEXT, amount REAL NOT NULL, date TEXT NOT NULL,
+            notes TEXT, status TEXT NOT NULL DEFAULT 'outstanding',
+            created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+        );
+        CREATE TABLE IF NOT EXISTS payables (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            vendor_name TEXT NOT NULL, description TEXT,
+            amount REAL NOT NULL, date TEXT NOT NULL,
+            notes TEXT, status TEXT NOT NULL DEFAULT 'outstanding',
+            created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+        );
+        CREATE TABLE IF NOT EXISTS payments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            type TEXT NOT NULL, reference_id INTEGER NOT NULL,
+            payment_date TEXT NOT NULL, amount_paid REAL NOT NULL,
+            notes TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
         );
     """)
     conn.commit()
@@ -393,10 +439,50 @@ with tab1:
         "HAVING SUM(ba.allocated_kg) > pl.output_kg "
         "ORDER BY pl.date DESC")
 
-    all_clear = overdue.empty and stagnant.empty and not spikes and unresolved_complaints == 0 and over_alloc.empty
+    overdue_rec = qdf("""
+        SELECT r.customer_name, r.company,
+               r.amount - COALESCE(SUM(p.amount_paid),0) AS balance,
+               r.date,
+               CAST(julianday('now','localtime') - julianday(r.date) AS INTEGER) AS days
+        FROM receivables r
+        LEFT JOIN payments p ON p.type='receivable' AND p.reference_id=r.id
+        WHERE r.status != 'paid'
+        GROUP BY r.id
+        HAVING days > 45
+        ORDER BY days DESC""")
+
+    overdue_pay = qdf("""
+        SELECT p.vendor_name,
+               p.amount - COALESCE(SUM(pm.amount_paid),0) AS balance,
+               p.date,
+               CAST(julianday('now','localtime') - julianday(p.date) AS INTEGER) AS days
+        FROM payables p
+        LEFT JOIN payments pm ON pm.type='payable' AND pm.reference_id=p.id
+        WHERE p.status != 'paid'
+        GROUP BY p.id
+        HAVING days > 45
+        ORDER BY days DESC""")
+
+    all_clear = (overdue.empty and stagnant.empty and not spikes
+                 and unresolved_complaints == 0 and over_alloc.empty
+                 and overdue_rec.empty and overdue_pay.empty)
     if all_clear:
-        st.success("✅ All orders current, no stagnant jobs, no procurement cost spikes, no open complaints.")
+        st.success("✅ All orders current, no stagnant jobs, no procurement spikes, no open complaints, no overdue credit.")
     else:
+        if not overdue_rec.empty:
+            total_overdue_r = overdue_rec["balance"].sum()
+            st.error(
+                f"🔴 **{len(overdue_rec)} receivable(s) overdue 45+ days** — "
+                f"₹{total_overdue_r:,.2f} outstanding — go to Credit page"
+            )
+            st.dataframe(overdue_rec, use_container_width=True, hide_index=True)
+        if not overdue_pay.empty:
+            total_overdue_p = overdue_pay["balance"].sum()
+            st.error(
+                f"🔴 **{len(overdue_pay)} payable(s) overdue 45+ days** — "
+                f"₹{total_overdue_p:,.2f} outstanding — go to Credit page"
+            )
+            st.dataframe(overdue_pay, use_container_width=True, hide_index=True)
         if unresolved_complaints > 0:
             st.error(f"🔴 **{unresolved_complaints} unresolved {'complaint' if unresolved_complaints==1 else 'complaints'}** — go to Production → Complaints & Returns to action them")
         if not over_alloc.empty:

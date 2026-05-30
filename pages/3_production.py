@@ -67,6 +67,37 @@ def _orders_linked_to_batch(conn, batch_id):
     return rows
 
 
+def _latest_procurement_price(conn, company_id, item_keyword):
+    row = conn.execute(
+        """SELECT unit_cost FROM procurement
+           WHERE company_id = ? AND LOWER(item) LIKE LOWER(?) AND price_type = 'per_unit'
+           ORDER BY purchase_date DESC, id DESC LIMIT 1""",
+        (company_id, f"%{item_keyword}%"),
+    ).fetchone()
+    return row["unit_cost"] if row else None
+
+
+def _batch_revenue(conn, batch_id):
+    rows = conn.execute(
+        """SELECT ba.allocated_kg, o.rate, o.rate_type
+           FROM batch_allocations ba
+           JOIN orders o ON ba.order_id = o.id
+           WHERE ba.batch_id = ?""",
+        (batch_id,),
+    ).fetchall()
+    if rows:
+        return sum(r["allocated_kg"] * r["rate"] for r in rows)
+    row = conn.execute(
+        """SELECT pl.output_kg, o.rate, o.rate_type
+           FROM production_logs pl JOIN orders o ON pl.order_id = o.id
+           WHERE pl.id = ?""",
+        (batch_id,),
+    ).fetchone()
+    if row:
+        return row["output_kg"] * row["rate"]
+    return None
+
+
 def _parse_time(t_str):
     if not t_str:
         return None
@@ -83,9 +114,13 @@ def _run_time_label(start, end):
     s = datetime.combine(date_type.today(), start)
     e = datetime.combine(date_type.today(), end)
     if e <= s:
-        e += timedelta(days=1)  # overnight run
+        e += timedelta(days=1)
     mins = int((e - s).total_seconds() / 60)
     return mins, f"{mins // 60}h {mins % 60}m"
+
+
+def _inr(val):
+    return f"₹{val:,.2f}"
 
 
 def _ensure_tables(conn):
@@ -123,7 +158,30 @@ def _ensure_tables(conn):
             logged_by TEXT NOT NULL,
             created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
         );
+        CREATE TABLE IF NOT EXISTS production_cost_edits (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            batch_id INTEGER NOT NULL,
+            edited_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+            purple_cost REAL,
+            wax_cost REAL,
+            mc_cost REAL,
+            overhead_cost REAL,
+            total_cost REAL,
+            cost_per_kg REAL
+        );
     """)
+    for sql in [
+        "ALTER TABLE production_logs ADD COLUMN purple_material_cost REAL",
+        "ALTER TABLE production_logs ADD COLUMN wax_cost REAL",
+        "ALTER TABLE production_logs ADD COLUMN mc_cost REAL",
+        "ALTER TABLE production_logs ADD COLUMN overhead_cost REAL",
+        "ALTER TABLE production_logs ADD COLUMN total_batch_cost REAL",
+        "ALTER TABLE production_logs ADD COLUMN cost_per_kg REAL",
+    ]:
+        try:
+            conn.execute(sql)
+        except Exception:
+            pass
     conn.commit()
 
 
@@ -156,15 +214,17 @@ def render_production_page(conn):
 
     # ── Monthly summary ────────────────────────────────────────────────────────
     row = conn.execute(
-        "SELECT COALESCE(SUM(output_kg),0), COALESCE(SUM(cartons_1kg),0), COALESCE(SUM(cartons_5kg),0) "
+        "SELECT COALESCE(SUM(output_kg),0), COALESCE(SUM(cartons_1kg),0), COALESCE(SUM(cartons_5kg),0), "
+        "COALESCE(SUM(total_batch_cost),0) "
         "FROM production_logs WHERE company_id = ? "
         "AND strftime('%Y-%m', date) = strftime('%Y-%m', 'now', 'localtime')",
         (company_id,),
     ).fetchone()
-    c1, c2, c3 = st.columns(3)
+    c1, c2, c3, c4 = st.columns(4)
     c1.metric("Output This Month (kg)", f"{row[0]:,.1f}")
     c2.metric("1 kg Cartons Packed", int(row[1]))
     c3.metric("5 kg Cartons Packed", int(row[2]))
+    c4.metric("Production Cost This Month", _inr(row[3]) if row[3] else "—")
     st.divider()
 
     # ── Edit form ──────────────────────────────────────────────────────────────
@@ -180,6 +240,17 @@ def render_production_page(conn):
             existing_allocs = _batch_allocations(conn, editing_id)
             non_none_order_opts = {k: v for k, v in order_opts.items() if v is not None}
 
+            # Pre-compute auto costs for captions
+            p_price = _latest_procurement_price(conn, company_id, "purple")
+            w_price = _latest_procurement_price(conn, company_id, "wax")
+            m_price = _latest_procurement_price(conn, company_id, "mc")
+            e_purple_val = float(entry["purple_material_kg"])
+            e_wax_val = float(entry["wax_kg"])
+            e_mc_val = float(entry["mc_kg"])
+            auto_purple_cost = round(e_purple_val * p_price, 2) if p_price else None
+            auto_wax_cost = round(e_wax_val * w_price, 2) if w_price else None
+            auto_mc_cost = round(e_mc_val * m_price, 2) if m_price else None
+
             with st.form("edit_prod_form"):
                 ec1, ec2 = st.columns(2)
                 with ec1:
@@ -190,11 +261,11 @@ def render_production_page(conn):
                 st.markdown("**Materials used (kg)**")
                 ep, ew, em = st.columns(3)
                 with ep:
-                    e_purple = st.number_input("Purple Material", min_value=0.0, value=float(entry["purple_material_kg"]), step=0.5, format="%.2f")
+                    e_purple = st.number_input("Purple Material", min_value=0.0, value=e_purple_val, step=0.5, format="%.2f")
                 with ew:
-                    e_wax = st.number_input("Wax", min_value=0.0, value=float(entry["wax_kg"]), step=0.5, format="%.2f")
+                    e_wax = st.number_input("Wax", min_value=0.0, value=e_wax_val, step=0.5, format="%.2f")
                 with em:
-                    e_mc = st.number_input("MC", min_value=0.0, value=float(entry["mc_kg"]), step=0.5, format="%.2f")
+                    e_mc = st.number_input("MC", min_value=0.0, value=e_mc_val, step=0.5, format="%.2f")
                 e_output = round((e_purple + e_wax + e_mc) * 0.9, 2)
                 st.text_input("Output kg (auto)", value=str(e_output), disabled=True)
 
@@ -240,6 +311,48 @@ def render_production_page(conn):
                         )
                     st.caption("Newly selected orders will be added with 0 kg — save and re-edit to set allocations.")
 
+                # ── Batch Costing (edit) ───────────────────────────────────────
+                st.markdown("**Batch Costing**")
+                ecp, ecw, ecm = st.columns(3)
+                with ecp:
+                    e_purple_cost = st.number_input(
+                        "Purple cost (₹)",
+                        min_value=0.0,
+                        value=float(entry["purple_material_cost"] or auto_purple_cost or 0.0),
+                        step=100.0, format="%.2f", key="e_pcost",
+                    )
+                    if auto_purple_cost:
+                        st.caption(f"Auto: {_inr(auto_purple_cost)}")
+                with ecw:
+                    e_wax_cost = st.number_input(
+                        "Wax cost (₹)",
+                        min_value=0.0,
+                        value=float(entry["wax_cost"] or auto_wax_cost or 0.0),
+                        step=100.0, format="%.2f", key="e_wcost",
+                    )
+                    if auto_wax_cost:
+                        st.caption(f"Auto: {_inr(auto_wax_cost)}")
+                with ecm:
+                    e_mc_cost = st.number_input(
+                        "MC cost (₹)",
+                        min_value=0.0,
+                        value=float(entry["mc_cost"] or auto_mc_cost or 0.0),
+                        step=100.0, format="%.2f", key="e_mcost",
+                    )
+                    if auto_mc_cost:
+                        st.caption(f"Auto: {_inr(auto_mc_cost)}")
+                e_overhead = st.number_input(
+                    "Overhead cost (₹) — labour, utilities, packaging",
+                    min_value=0.0,
+                    value=float(entry["overhead_cost"] or 0.0),
+                    step=100.0, format="%.2f", key="e_overhead",
+                )
+                e_total_cost = e_purple_cost + e_wax_cost + e_mc_cost + e_overhead
+                e_cpkg = round(e_total_cost / e_output, 2) if e_output > 0 else 0.0
+                em1, em2 = st.columns(2)
+                em1.metric("Total Batch Cost", _inr(e_total_cost))
+                em2.metric("Cost / kg", _inr(e_cpkg))
+
                 st.markdown("**Temperature Log** — one reading per line: `HH:MM | temp°C | note`")
                 temp_str = "\n".join(
                     f"{t['time']} | {t['temp']} | {t.get('note','')}"
@@ -253,6 +366,22 @@ def render_production_page(conn):
                     save_btn = st.form_submit_button("Save changes", type="primary")
                 with ca:
                     cancel_btn = st.form_submit_button("Cancel")
+
+            # Cost edit history (outside form)
+            cost_edits = conn.execute(
+                "SELECT * FROM production_cost_edits WHERE batch_id = ? ORDER BY edited_at DESC",
+                (editing_id,),
+            ).fetchall()
+            if cost_edits:
+                with st.expander("Cost edit history"):
+                    for ce in cost_edits:
+                        st.markdown(
+                            f"**{ce['edited_at']}** — Purple: {_inr(ce['purple_cost'] or 0)}, "
+                            f"Wax: {_inr(ce['wax_cost'] or 0)}, MC: {_inr(ce['mc_cost'] or 0)}, "
+                            f"Overhead: {_inr(ce['overhead_cost'] or 0)}, "
+                            f"Total: {_inr(ce['total_cost'] or 0)}, "
+                            f"Cost/kg: {_inr(ce['cost_per_kg'] or 0)}"
+                        )
 
             if save_btn:
                 if not e_batch.strip():
@@ -278,18 +407,36 @@ def render_production_page(conn):
                                     pass
 
                     primary_order_id = non_none_order_opts.get(e_orders[0]) if e_orders else None
+                    e_total_cost_final = e_purple_cost + e_wax_cost + e_mc_cost + e_overhead
+                    e_cpkg_final = round(e_total_cost_final / e_output, 2) if e_output > 0 else 0.0
+
+                    # Log cost edit if costs changed
+                    old_total = float(entry["total_batch_cost"] or 0)
+                    if abs(e_total_cost_final - old_total) > 0.01:
+                        conn.execute(
+                            "INSERT INTO production_cost_edits "
+                            "(batch_id, purple_cost, wax_cost, mc_cost, overhead_cost, total_cost, cost_per_kg) "
+                            "VALUES (?,?,?,?,?,?,?)",
+                            (editing_id, e_purple_cost, e_wax_cost, e_mc_cost, e_overhead,
+                             e_total_cost_final, e_cpkg_final),
+                        )
 
                     conn.execute(
                         "UPDATE production_logs SET date=?, batch_ref=?, purple_material_kg=?, wax_kg=?, "
                         "mc_kg=?, output_kg=?, machine_start=?, machine_end=?, run_time_minutes=?, "
                         "bottles_1kg=?, bottles_5kg=?, cartons_1kg=?, cartons_5kg=?, rejections_kg=?, "
-                        "order_id=?, temperature_log=?, additional_notes=? WHERE id=?",
+                        "order_id=?, temperature_log=?, additional_notes=?, "
+                        "purple_material_cost=?, wax_cost=?, mc_cost=?, overhead_cost=?, "
+                        "total_batch_cost=?, cost_per_kg=? WHERE id=?",
                         (e_date.isoformat(), e_batch.strip(), e_purple, e_wax, e_mc, e_output,
                          e_start_str, e_end_str, e_run,
                          e_b1 or None, e_b5 or None, e_c1 or None, e_c5 or None,
                          e_rej or None, primary_order_id,
                          json.dumps(e_temps) if e_temps else None,
-                         e_notes.strip() or None, editing_id),
+                         e_notes.strip() or None,
+                         e_purple_cost or None, e_wax_cost or None, e_mc_cost or None,
+                         e_overhead or None, e_total_cost_final or None, e_cpkg_final or None,
+                         editing_id),
                     )
 
                     conn.execute("DELETE FROM batch_allocations WHERE batch_id = ?", (editing_id,))
@@ -330,6 +477,62 @@ def render_production_page(conn):
 
     output_kg = round((purple_kg + wax_kg + mc_kg) * 0.9, 2)
     st.text_input("Output kg — auto (sum × 0.9)", value=str(output_kg), disabled=True, key="p_out")
+
+    # ── Batch Costing (new entry) ──────────────────────────────────────────────
+    with st.expander("Batch Costing", expanded=True):
+        p_price = _latest_procurement_price(conn, company_id, "purple")
+        w_price = _latest_procurement_price(conn, company_id, "wax")
+        m_price = _latest_procurement_price(conn, company_id, "mc")
+
+        auto_p_cost = round(purple_kg * p_price, 2) if p_price and purple_kg > 0 else None
+        auto_w_cost = round(wax_kg * w_price, 2) if w_price and wax_kg > 0 else None
+        auto_m_cost = round(mc_kg * m_price, 2) if m_price and mc_kg > 0 else None
+
+        cc1, cc2, cc3 = st.columns(3)
+        with cc1:
+            if p_price and purple_kg > 0:
+                st.markdown(f"**Purple:** {purple_kg} kg × {_inr(p_price)}/kg = **{_inr(auto_p_cost)}**")
+            elif not p_price:
+                st.warning("No procurement price found for Purple Material")
+            purple_cost = st.number_input(
+                "Purple cost (₹)", min_value=0.0,
+                value=float(auto_p_cost or 0.0),
+                step=100.0, format="%.2f", key="p_pcost",
+            )
+        with cc2:
+            if w_price and wax_kg > 0:
+                st.markdown(f"**Wax:** {wax_kg} kg × {_inr(w_price)}/kg = **{_inr(auto_w_cost)}**")
+            elif not w_price:
+                st.warning("No procurement price found for Wax")
+            wax_cost = st.number_input(
+                "Wax cost (₹)", min_value=0.0,
+                value=float(auto_w_cost or 0.0),
+                step=100.0, format="%.2f", key="p_wcost",
+            )
+        with cc3:
+            if m_price and mc_kg > 0:
+                st.markdown(f"**MC:** {mc_kg} kg × {_inr(m_price)}/kg = **{_inr(auto_m_cost)}**")
+            elif not m_price:
+                st.warning("No procurement price found for MC")
+            mc_cost = st.number_input(
+                "MC cost (₹)", min_value=0.0,
+                value=float(auto_m_cost or 0.0),
+                step=100.0, format="%.2f", key="p_mcost",
+            )
+
+        overhead_cost = st.number_input(
+            "Overhead cost (₹) — labour, utilities, packaging",
+            min_value=0.0, value=0.0, step=100.0, format="%.2f", key="p_overhead",
+            help="One manual field for all overhead: labour, electricity, packaging, etc.",
+        )
+
+        total_batch_cost = purple_cost + wax_cost + mc_cost + overhead_cost
+        cost_per_kg = round(total_batch_cost / output_kg, 2) if output_kg > 0 else 0.0
+
+        sm1, sm2, sm3 = st.columns(3)
+        sm1.metric("Material Cost", _inr(purple_cost + wax_cost + mc_cost))
+        sm2.metric("Total Batch Cost", _inr(total_batch_cost))
+        sm3.metric("Cost / kg", _inr(cost_per_kg) if cost_per_kg else "—")
 
     with st.expander("Machine timing (optional — captures run duration)"):
         fs1, fs2 = st.columns(2)
@@ -386,6 +589,22 @@ def render_production_page(conn):
             elif output_kg > 0:
                 st.info(f"{total_allocated:.1f} kg allocated out of {output_kg:.1f} kg produced")
 
+        # Est. revenue + margin (if orders linked)
+        if linked_orders and total_batch_cost > 0:
+            est_revenue = sum(
+                st.session_state.get(f"alloc_{order_opts[lo]}", 0.0) *
+                (conn.execute("SELECT rate FROM orders WHERE id = ?", (order_opts[lo],)).fetchone() or {"rate": 0})["rate"]
+                for lo in linked_orders
+            )
+            if est_revenue > 0:
+                margin = round((est_revenue - total_batch_cost) / est_revenue * 100, 1)
+                margin_color = "#2ecc71" if margin >= 15 else ("#f39c12" if margin >= 10 else "#e74c3c")
+                st.markdown(
+                    f"Est. Revenue: **{_inr(est_revenue)}** · Est. Margin: "
+                    f"<span style='color:{margin_color};font-weight:bold'>{margin}%</span>",
+                    unsafe_allow_html=True,
+                )
+
     with st.expander("Temperature log (optional — up to 6 readings)"):
         if "temp_row_ids" not in st.session_state:
             st.session_state["temp_row_ids"] = []
@@ -440,11 +659,19 @@ def render_production_page(conn):
             linked_orders_val = st.session_state.get("p_orders", [])
             primary_order_id = order_opts.get(linked_orders_val[0]) if linked_orders_val else None
 
+            p_cost_save = st.session_state.get("p_pcost", 0.0)
+            w_cost_save = st.session_state.get("p_wcost", 0.0)
+            m_cost_save = st.session_state.get("p_mcost", 0.0)
+            o_cost_save = st.session_state.get("p_overhead", 0.0)
+            total_save = p_cost_save + w_cost_save + m_cost_save + o_cost_save
+            cpkg_save = round(total_save / output_kg, 2) if output_kg > 0 else 0.0
+
             conn.execute(
                 "INSERT INTO production_logs (company_id, date, batch_ref, purple_material_kg, wax_kg, mc_kg, "
                 "output_kg, machine_start, machine_end, run_time_minutes, bottles_1kg, bottles_5kg, "
-                "cartons_1kg, cartons_5kg, rejections_kg, order_id, temperature_log, additional_notes) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "cartons_1kg, cartons_5kg, rejections_kg, order_id, temperature_log, additional_notes, "
+                "purple_material_cost, wax_cost, mc_cost, overhead_cost, total_batch_cost, cost_per_kg) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (company_id, prod_date.isoformat(), batch_ref.strip(),
                  purple_kg, wax_kg, mc_kg, output_kg,
                  start_str, end_str, run_time_mins,
@@ -452,7 +679,9 @@ def render_production_page(conn):
                  cartons_1kg or None, cartons_5kg or None,
                  rejections_kg or None, primary_order_id,
                  json.dumps(temp_log) if temp_log else None,
-                 additional_notes.strip() or None),
+                 additional_notes.strip() or None,
+                 p_cost_save or None, w_cost_save or None, m_cost_save or None,
+                 o_cost_save or None, total_save or None, cpkg_save or None),
             )
             new_batch_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
 
@@ -536,6 +765,8 @@ def render_production_page(conn):
             timing = f"{lg['machine_start']}–{lg['machine_end']}" if lg["machine_start"] else "—"
             bottles = f"{int(lg['bottles_1kg'] or 0)} / {int(lg['bottles_5kg'] or 0)}"
             cartons = f"{int(lg['cartons_1kg'] or 0)} / {int(lg['cartons_5kg'] or 0)}"
+            cost_str = _inr(lg["total_batch_cost"]) if lg["total_batch_cost"] else "—"
+            cpkg_str = _inr(lg["cost_per_kg"]) if lg["cost_per_kg"] else "—"
             edit_url = f"?page=Production&prod_action=edit&prod_id={lg['id']}"
             del_url  = f"?page=Production&prod_action=del&prod_id={lg['id']}"
             rows_html += (
@@ -543,7 +774,7 @@ def render_production_page(conn):
                 f"<td>{lg['id']}</td><td>{lg['date']}</td><td>{lg['batch_ref']}</td>"
                 f"<td>{mats}</td><td><b>{lg['output_kg']}</b></td>"
                 f"<td>{timing}</td><td>{bottles}</td><td>{cartons}</td>"
-                f"<td>{lg['rejections_kg'] or '—'}</td><td>{linked}</td>"
+                f"<td>{lg['rejections_kg'] or '—'}</td><td>{cost_str}</td><td>{cpkg_str}</td><td>{linked}</td>"
                 f"<td><a href='#' onclick=\"window.top.location='{edit_url}';return false;\" class='act-btn'>Edit</a>"
                 f"<a href='#' onclick=\"window.top.location='{del_url}';return false;\" class='act-btn del'>Del</a></td>"
                 f"</tr>"
@@ -554,7 +785,7 @@ def render_production_page(conn):
             + "<table class='orders-table'><thead><tr>"
             "<th>ID</th><th>Date</th><th>Batch</th><th>Purple/Wax/MC kg</th>"
             "<th>Output kg</th><th>Machine time</th><th>Bottles 1kg/5kg</th>"
-            "<th>Cartons 1kg/5kg</th><th>Rejections kg</th><th>Order(s)</th><th>Actions</th>"
+            "<th>Cartons 1kg/5kg</th><th>Rejections kg</th><th>Batch Cost</th><th>Cost/kg</th><th>Order(s)</th><th>Actions</th>"
             f"</tr></thead><tbody>{rows_html}</tbody></table>",
             unsafe_allow_html=True,
         )
@@ -580,8 +811,74 @@ def render_production_page(conn):
                     st.session_state["confirm_del_prod_id"] = None
                     st.rerun()
 
+    # ── Batch Cost Summary ─────────────────────────────────────────────────────
+    _render_cost_summary(conn, company_id)
+
     # ── Complaints & Returns ───────────────────────────────────────────────────
     _render_complaints(conn, company_id)
+
+
+def _render_cost_summary(conn, company_id):
+    st.divider()
+    st.subheader("Batch Cost Summary")
+    st.caption("Color-coded by margin: green ≥15%, yellow 10–15%, red <10%.")
+
+    rows = conn.execute(
+        """SELECT pl.id, pl.batch_ref, pl.date, pl.output_kg,
+                  pl.total_batch_cost, pl.cost_per_kg,
+                  COALESCE(
+                      (SELECT SUM(ba.allocated_kg * o.rate)
+                       FROM batch_allocations ba JOIN orders o ON ba.order_id = o.id
+                       WHERE ba.batch_id = pl.id),
+                      CASE WHEN pl.order_id IS NOT NULL
+                           THEN pl.output_kg * (SELECT rate FROM orders WHERE id = pl.order_id)
+                           ELSE NULL END
+                  ) AS revenue
+           FROM production_logs pl
+           WHERE pl.company_id = ? AND pl.total_batch_cost IS NOT NULL
+           ORDER BY pl.date DESC, pl.id DESC""",
+        (company_id,),
+    ).fetchall()
+
+    if not rows:
+        st.info("No cost data yet — log a batch with costs to see the summary.")
+        return
+
+    header = (
+        "<tr><th>Batch</th><th>Date</th><th>Output kg</th>"
+        "<th>Total Cost</th><th>Cost/kg</th><th>Revenue</th><th>Margin %</th></tr>"
+    )
+    body = ""
+    for r in rows:
+        rev = r["revenue"]
+        total_cost = r["total_batch_cost"]
+        if rev and rev > 0 and total_cost:
+            margin = round((rev - total_cost) / rev * 100, 1)
+            margin_str = f"{margin}%"
+            row_bg = "#1a3a1a" if margin >= 15 else ("#3a3000" if margin >= 10 else "#3a1a1a")
+            margin_color = "#2ecc71" if margin >= 15 else ("#f39c12" if margin >= 10 else "#e74c3c")
+        else:
+            margin_str = "—"
+            row_bg = "#2a2a2a"
+            margin_color = "#888"
+
+        body += (
+            f"<tr style='background:{row_bg}'>"
+            f"<td>{r['batch_ref']}</td>"
+            f"<td>{r['date']}</td>"
+            f"<td>{r['output_kg']:,.1f}</td>"
+            f"<td>{_inr(total_cost)}</td>"
+            f"<td>{_inr(r['cost_per_kg']) if r['cost_per_kg'] else '—'}</td>"
+            f"<td>{_inr(rev) if rev else '—'}</td>"
+            f"<td style='color:{margin_color};font-weight:bold'>{margin_str}</td>"
+            f"</tr>"
+        )
+
+    st.markdown(
+        TABLE_CSS
+        + f"<table class='orders-table'><thead>{header}</thead><tbody>{body}</tbody></table>",
+        unsafe_allow_html=True,
+    )
 
 
 def _render_complaints(conn, company_id):
@@ -607,7 +904,6 @@ def _render_complaints(conn, company_id):
 
         c_order_label = st.selectbox("Linked order", list(complaint_order_opts.keys()), key="c_order")
 
-        # Auto-fill customer name when order changes
         _prev_key = "_c_order_prev"
         if st.session_state.get(_prev_key) != c_order_label:
             oid_sel = complaint_order_opts.get(c_order_label)
