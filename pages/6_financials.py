@@ -54,78 +54,126 @@ EXPENSES = {
 # ─────────────────────────────────────────────────────────────────────────────
 # STYLE
 # ─────────────────────────────────────────────────────────────────────────────
-_GREEN  = "#2ecc71"
-_YELLOW = "#f39c12"
-_RED    = "#e74c3c"
-_BLUE   = "#3498db"
-_PURPLE = "#9b59b6"
+_GREEN  = "#1B7F4F"
+_YELLOW = "#D97706"
+_RED    = "#C0392B"
+_BLUE   = "#C17F3E"
+_PURPLE = "#8B6A45"
 
-_PIE_COLORS = ["#3498db","#e67e22","#2ecc71","#9b59b6","#e74c3c","#1abc9c","#f39c12","#95a5a6"]
+_PIE_COLORS = ["#C17F3E","#1B7F4F","#D97706","#8B6A45","#C0392B","#2C2218","#C17F3E","#8B6A45"]
 _PLOT = dict(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-             font_color="#ccc", margin=dict(t=45, b=30, l=10, r=10))
+             font_color="#2C2218", margin=dict(t=45, b=30, l=10, r=10))
+
+_WARM_CSS = (
+    "<style>"
+    "@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600&display=swap');"
+    "* { font-family: 'DM Sans', sans-serif !important; }"
+    "[class*='material-symbols'] { font-family: 'Material Symbols Rounded' !important; }"
+    "[data-testid='metric-container']{background:#FFF8F0;border:1px solid #E8D5B7;"
+    "border-radius:10px;padding:14px 18px}"
+    "[data-testid='stMetricValue']{color:#2C2218}"
+    "[data-testid='stMetricLabel']{color:#8B6A45}"
+    "hr{border-color:#E8D5B7!important}"
+    "h1{border-bottom:3px solid #C17F3E;padding-bottom:6px;display:inline-block}"
+    "h2,h3{color:#2C2218}"
+    "[data-testid='stDataFrame'] th{background:#FFF8F0!important;color:#2C2218!important;"
+    "border:1px solid #E8D5B7!important}"
+    "[data-testid='stDataFrame'] td{border-color:#E8D5B7!important}"
+    "div[data-baseweb='tab-highlight']{background:#C17F3E!important}"
+    "button[data-baseweb='tab'][aria-selected='true']{color:#C17F3E!important}"
+    "div[data-baseweb='input']{border:1px solid #C5A882!important;border-radius:6px!important}div[data-baseweb='textarea']{border:1px solid #C5A882!important;border-radius:6px!important}div[data-baseweb='select'] > div:first-child{border:1px solid #C5A882!important;border-radius:6px!important}"
+    "</style>"
+)
+_DARK_CSS = (
+    "<style>"
+    "@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600&display=swap');"
+    "* { font-family: 'DM Sans', sans-serif !important; }"
+    "[class*='material-symbols'] { font-family: 'Material Symbols Rounded' !important; }"
+    "[data-testid='stAppViewContainer']{background:#1A1410!important}"
+    "[data-testid='stHeader']{background:#1A1410!important}"
+    "[data-testid='metric-container']{background:#2C2218!important;border:1px solid #4A3728!important;"
+    "border-radius:10px;padding:14px 18px}"
+    "[data-testid='stMetricValue']{color:#F5E6D3!important}"
+    "[data-testid='stMetricLabel']{color:#C4A882!important}"
+    "[data-testid='stSidebar']{background:#1E160E!important}"
+    "hr{border-color:#4A3728!important}"
+    "h1{border-bottom:3px solid #C17F3E;padding-bottom:6px;display:inline-block;color:#F5E6D3!important}"
+    "h2,h3{color:#F5E6D3!important}"
+    "[data-testid='stDataFrame'] th{background:#2C2218!important;color:#F5E6D3!important;"
+    "border:1px solid #4A3728!important}"
+    "[data-testid='stDataFrame'] td{border-color:#4A3728!important}"
+    "div[data-baseweb='input']{border:1px solid #4A3728!important;border-radius:6px!important;background:#231C14!important}"
+    "div[data-baseweb='input'] input{background:#231C14!important;color:#F5E6D3!important}"
+    "div[data-baseweb='textarea']{border:1px solid #4A3728!important;border-radius:6px!important;background:#231C14!important}"
+    "div[data-baseweb='textarea'] textarea{background:#231C14!important;color:#F5E6D3!important}"
+    "div[data-baseweb='select'] > div:first-child{border:1px solid #4A3728!important;border-radius:6px!important;background:#231C14!important}"
+    "[data-testid='stForm']{background:#2C2218!important;border-color:#4A3728!important}"
+    "[data-testid='stExpander'] details{background:#2C2218!important;border-color:#4A3728!important}"
+    "</style>"
+)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # ACCOUNTING GLOSSARY — used for hover tooltips on uploaded statements
 # ─────────────────────────────────────────────────────────────────────────────
 _TIPS = {
     "Sales": "Total money received from customers for goods or services sold this period.",
-    "Revenue": "Total money received from customers — same as Sales.",
-    "Turnover": "Total money received from customers — same as Sales or Revenue.",
-    "Gross Profit": "Sales minus the direct cost of goods sold. Overhead costs like salaries and rent have NOT been deducted yet — this is a mid-point figure.",
-    "Gross Loss": "When the direct cost of goods exceeds revenue — the business lost money even before paying overheads.",
+    "Revenue": "Total money received from customers, same as Sales.",
+    "Turnover": "Total money received from customers, same as Sales or Revenue.",
+    "Gross Profit": "Sales minus the direct cost of goods sold. Overhead costs like salaries and rent have NOT been deducted yet, this is a mid-point figure.",
+    "Gross Loss": "When the direct cost of goods exceeds revenue, the business lost money even before paying overheads.",
     "Net Profit": "What is actually left after ALL costs are paid. This is the real money the business made.",
-    "Net Loss": "When total expenses exceed total revenue — the business made an overall loss for the period.",
-    "Cost of Goods Sold": "The direct cost to produce or buy the items sold — raw materials, direct labour.",
-    "COGS": "Short for Cost of Goods Sold — the direct cost to make or buy items sold.",
+    "Net Loss": "When total expenses exceed total revenue, the business made an overall loss for the period.",
+    "Cost of Goods Sold": "The direct cost to produce or buy the items sold: raw materials, direct labour.",
+    "COGS": "Short for Cost of Goods Sold, the direct cost to make or buy items sold.",
     "Opening Stock": "Value of unsold goods at the start of this period, carried over from the previous one.",
-    "Closing Stock": "Value of unsold goods remaining at the end of this period — subtracted to avoid double-counting.",
+    "Closing Stock": "Value of unsold goods remaining at the end of this period, subtracted to avoid double-counting.",
     "Purchases": "Goods or raw materials bought during the period to sell or use in production.",
-    "Direct Expenses": "Costs directly tied to making your product — factory wages, power, inward freight.",
-    "Indirect Expenses": "Overhead costs not tied to production — admin salaries, rent, marketing, interest.",
+    "Direct Expenses": "Costs directly tied to making your product: factory wages, power, inward freight.",
+    "Indirect Expenses": "Overhead costs not tied to production: admin salaries, rent, marketing, interest.",
     "Depreciation": "The annual wear-and-tear cost of equipment and vehicles spread over their useful life. No cash leaves the business, but it reduces profit.",
-    "Interest on Loans": "The cost of borrowing money — paid to banks or lenders on outstanding loans.",
-    "Interest": "The cost of borrowing money — paid to banks or lenders on outstanding loans.",
-    "Current Assets": "Things owned that can be turned into cash within 12 months — stock, debtors, cash at bank.",
-    "Fixed Assets": "Long-term things owned that last more than a year — machinery, vehicles, buildings.",
-    "Total Assets": "Everything the business owns — current assets plus fixed assets combined.",
-    "Current Liabilities": "Amounts owed that must be paid within 12 months — creditors, short-term loans.",
+    "Interest on Loans": "The cost of borrowing money, paid to banks or lenders on outstanding loans.",
+    "Interest": "The cost of borrowing money, paid to banks or lenders on outstanding loans.",
+    "Current Assets": "Things owned that can be turned into cash within 12 months: stock, debtors, cash at bank.",
+    "Fixed Assets": "Long-term things owned that last more than a year: machinery, vehicles, buildings.",
+    "Total Assets": "Everything the business owns, current assets plus fixed assets combined.",
+    "Current Liabilities": "Amounts owed that must be paid within 12 months: creditors, short-term loans.",
     "Long Term Liabilities": "Loans or debts that do not need to be repaid within the next 12 months.",
     "Capital": "Money the owner(s) originally put into the business.",
-    "Equity": "The owner's stake in the business — what would be left if all debts were paid and assets sold.",
-    "Net Worth": "Same as Equity — the owner's share of the business after all liabilities are settled.",
+    "Equity": "The owner's stake in the business, what would be left if all debts were paid and assets sold.",
+    "Net Worth": "Same as Equity, the owner's share of the business after all liabilities are settled.",
     "Retained Earnings": "Profits from previous years kept inside the business rather than withdrawn by the owner.",
-    "Reserves": "Profits set aside for a specific future purpose — acts as a buffer fund.",
+    "Reserves": "Profits set aside for a specific future purpose, acts as a buffer fund.",
     "Debtors": "Customers who owe you money for goods already delivered but not yet paid for.",
     "Sundry Debtors": "Several customers collectively owing you money. 'Sundry' means miscellaneous/various.",
-    "Receivables": "Same as Debtors — money owed to you by customers.",
+    "Receivables": "Same as Debtors, money owed to you by customers.",
     "Creditors": "Suppliers or vendors you owe money to for goods already received.",
     "Sundry Creditors": "Several suppliers you collectively owe money to. 'Sundry' means miscellaneous/various.",
-    "Payables": "Same as Creditors — money you owe to suppliers.",
+    "Payables": "Same as Creditors, money you owe to suppliers.",
     "Stock": "Goods sitting in your warehouse that have not been sold yet.",
-    "Inventory": "Same as Stock — unsold goods in your warehouse.",
+    "Inventory": "Same as Stock, unsold goods in your warehouse.",
     "Cash in Hand": "Physical cash held at the office or premises (not in a bank account).",
     "Cash at Bank": "Money sitting in your bank account right now.",
     "Bank Balance": "The current amount of money in your bank account.",
     "Loans": "Money borrowed from a bank or financial institution, to be repaid with interest.",
-    "Bank Overdraft": "When your bank account goes into negative — the bank is effectively lending you money short-term.",
-    "Working Capital": "Current Assets minus Current Liabilities — cash available for day-to-day operations.",
-    "Trading Account": "Shows Gross Profit — Revenue minus cost of goods sold, before overhead expenses are deducted.",
+    "Bank Overdraft": "When your bank account goes into negative, the bank is effectively lending you money short-term.",
+    "Working Capital": "Current Assets minus Current Liabilities, cash available for day-to-day operations.",
+    "Trading Account": "Shows Gross Profit, Revenue minus cost of goods sold, before overhead expenses are deducted.",
     "Profit & Loss Account": "A summary of all income and expenses over a period, showing whether the business made or lost money.",
     "Balance Sheet": "A snapshot of everything the business owns (assets) and owes (liabilities) on a specific date.",
     "Accumulated Depreciation": "Total depreciation charged on an asset from the day it was bought to today.",
-    "Loan from Directors": "Money lent to the company by its own directors — a common form of internal borrowing.",
-    "Outstanding Expenses": "Expenses incurred but not yet paid — they are owed and appear as a liability.",
-    "Prepaid Expenses": "Expenses paid in advance for a future period — shown as an asset since the benefit is yet to be received.",
+    "Loan from Directors": "Money lent to the company by its own directors, a common form of internal borrowing.",
+    "Outstanding Expenses": "Expenses incurred but not yet paid, they are owed and appear as a liability.",
+    "Prepaid Expenses": "Expenses paid in advance for a future period, shown as an asset since the benefit is yet to be received.",
     "Advance": "Money paid or received before goods/services are delivered.",
 }
 
 _TOOLTIP_CSS = """<style>
-.fintip{position:relative;display:inline-block;border-bottom:1px dotted #777;cursor:help}
+.fintip{position:relative;display:inline-block;border-bottom:1px dotted #C17F3E;cursor:help}
 .fintip .fintip-t{
-    visibility:hidden;background:#0d1b2a;color:#e0e0e0;text-align:left;
+    visibility:hidden;background:#FFF8F0;color:#2C2218;text-align:left;
     border-radius:6px;padding:8px 12px;position:absolute;z-index:9999;
     bottom:130%;left:0;min-width:240px;max-width:300px;font-size:12px;line-height:1.6;
-    border:1px solid #2a5a8a;box-shadow:0 4px 16px rgba(0,0,0,.7);pointer-events:none;
+    border:1px solid #E8D5B7;box-shadow:0 4px 16px rgba(0,0,0,.12);pointer-events:none;
     white-space:normal;
 }
 .fintip:hover .fintip-t{visibility:visible}
@@ -170,25 +218,25 @@ def _render_stmt_card(title: str, rows: list, accent: str = _BLUE) -> None:
             rows_html += (
                 f"<tr><td colspan='2' style='padding:10px {pl}px 4px;color:{accent};"
                 f"font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:0.6px;"
-                f"border-top:1px solid #2a2a2a'>{label}</td></tr>"
+                f"border-top:1px solid #E8D5B7'>{label}</td></tr>"
             )
         elif is_tot:
             rows_html += (
-                f"<tr style='background:#1a1a1a'>"
-                f"<td style='padding:10px {pl}px;color:#fff;font-weight:700'>{_tip(label)}</td>"
+                f"<tr style='background:#FFF0DC'>"
+                f"<td style='padding:10px {pl}px;color:#2C2218;font-weight:700'>{_tip(label)}</td>"
                 f"<td style='padding:10px 12px;text-align:right;color:{_GREEN};"
                 f"font-weight:700;font-size:15px'>{_inr(amount)}</td></tr>"
             )
         else:
             rows_html += (
-                f"<tr style='border-bottom:1px solid #1c1c1c'>"
-                f"<td style='padding:7px {pl}px;color:#ccc'>{_tip(label)}</td>"
-                f"<td style='padding:7px 12px;text-align:right;color:#aaa'>{_inr(amount)}</td></tr>"
+                f"<tr style='border-bottom:1px solid #E8D5B7'>"
+                f"<td style='padding:7px {pl}px;color:#2C2218'>{_tip(label)}</td>"
+                f"<td style='padding:7px 12px;text-align:right;color:#8B6A45'>{_inr(amount)}</td></tr>"
             )
     st.markdown(
-        f"<div style='background:#111;border-radius:10px;overflow:hidden;"
-        f"border:1px solid #222;margin-bottom:16px'>"
-        f"<div style='padding:11px 16px;background:#161626;border-bottom:1px solid #222'>"
+        f"<div style='background:#FDFAF6;border-radius:10px;overflow:hidden;"
+        f"border:1px solid #E8D5B7;margin-bottom:16px'>"
+        f"<div style='padding:11px 16px;background:#FFF0DC;border-bottom:1px solid #E8D5B7'>"
         f"<span style='color:{accent};font-weight:600;font-size:14px'>{title}</span></div>"
         f"<table style='width:100%;border-collapse:collapse;font-size:14px'>"
         f"<tbody>{rows_html}</tbody></table></div>",
@@ -303,23 +351,23 @@ def _tab_snapshot(company: str) -> None:
         nm = d["net_profit"] / d["sales"] * 100
         debtor_html = (
             f"<p style='color:{_RED};margin:6px 0'>⚠️ Customers owe us "
-            f"<b>{_inr(d['debtors'])}</b> — check if any is overdue</p>"
+            f"<b>{_inr(d['debtors'])}</b>, check if any is overdue</p>"
             if d["debtors"] > 0
             else f"<p style='color:{_GREEN};margin:6px 0'>✅ No money owed by customers</p>"
         )
         with col:
             st.markdown(
-                f"<div style='background:#1a1a2e;border-radius:12px;padding:22px 24px;"
-                f"border:1px solid #2a3a5e;margin-bottom:12px'>"
-                f"<h3 style='color:#fff;margin:0 0 14px 0'>{co}</h3>"
-                f"<p style='color:#fff;font-size:18px;font-weight:700;margin:4px 0'>"
+                f"<div style='background:#FFF8F0;border-radius:12px;padding:22px 24px;"
+                f"border:1px solid #E8D5B7;margin-bottom:12px'>"
+                f"<h3 style='color:#2C2218;margin:0 0 14px 0'>{co}</h3>"
+                f"<p style='color:#2C2218;font-size:18px;font-weight:700;margin:4px 0'>"
                 f"💰 We made {_inr(d['sales'])} in sales this year</p>"
                 f"<p style='color:{_mc(nm)};margin:6px 0'>{_me(nm)} After all costs, we kept "
                 f"<b>{_inr(d['net_profit'])}</b> ({nm:.1f}%)</p>"
-                f"<p style='color:#ccc;margin:6px 0'>🏦 Cash in bank right now: "
+                f"<p style='color:#2C2218;margin:6px 0'>🏦 Cash in bank right now: "
                 f"<b>{_inr(d['cash_bank'])}</b></p>"
                 f"{debtor_html}"
-                f"<p style='color:#aaa;margin:6px 0'>📦 Unsold stock in warehouse: "
+                f"<p style='color:#8B6A45;margin:6px 0'>📦 Unsold stock in warehouse: "
                 f"{_inr(d['stock'])}</p>"
                 f"</div>",
                 unsafe_allow_html=True,
@@ -331,17 +379,17 @@ def _tab_snapshot(company: str) -> None:
         t_c = FY25["Rwox"]["cash_bank"]  + FY25["Elastohorse"]["cash_bank"]
         cnm = t_p / t_s * 100
         st.markdown(
-            f"<div style='background:#0d2137;border-radius:12px;padding:22px 24px;"
-            f"border:1px solid #1a4a7a;margin-bottom:16px'>"
+            f"<div style='background:#FFF0DC;border-radius:12px;padding:22px 24px;"
+            f"border:1px solid #E8D5B7;margin-bottom:16px'>"
             f"<h3 style='color:{_BLUE};margin:0 0 14px 0'>🌐 Both Businesses Together</h3>"
             f"<div style='display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px'>"
-            f"<div><p style='color:#888;font-size:12px;margin:0'>COMBINED SALES</p>"
-            f"<p style='color:#fff;font-size:24px;font-weight:700;margin:4px 0'>{_inr(t_s)}</p></div>"
-            f"<div><p style='color:#888;font-size:12px;margin:0'>COMBINED PROFIT</p>"
+            f"<div><p style='color:#8B6A45;font-size:12px;margin:0'>COMBINED SALES</p>"
+            f"<p style='color:#2C2218;font-size:24px;font-weight:700;margin:4px 0'>{_inr(t_s)}</p></div>"
+            f"<div><p style='color:#8B6A45;font-size:12px;margin:0'>COMBINED PROFIT</p>"
             f"<p style='color:{_mc(cnm)};font-size:24px;font-weight:700;margin:4px 0'>{_inr(t_p)}</p>"
-            f"<p style='color:#888;font-size:12px;margin:0'>{cnm:.1f}% of total sales</p></div>"
-            f"<div><p style='color:#888;font-size:12px;margin:0'>CASH IN BANK</p>"
-            f"<p style='color:#fff;font-size:24px;font-weight:700;margin:4px 0'>{_inr(t_c)}</p></div>"
+            f"<p style='color:#8B6A45;font-size:12px;margin:0'>{cnm:.1f}% of total sales</p></div>"
+            f"<div><p style='color:#8B6A45;font-size:12px;margin:0'>CASH IN BANK</p>"
+            f"<p style='color:#2C2218;font-size:24px;font-weight:700;margin:4px 0'>{_inr(t_c)}</p></div>"
             f"</div></div>",
             unsafe_allow_html=True,
         )
@@ -385,19 +433,19 @@ def _tab_expenses(company: str, kp: str) -> None:
 
             for label, amount in exp_list:
                 per_100 = amount / sales * 100
-                clr, flag = (_RED,"🔴") if per_100>40 else (_YELLOW,"⚠️") if per_100>20 else ("#aaa","   ")
+                clr, flag = (_RED,"🔴") if per_100>40 else (_YELLOW,"⚠️") if per_100>20 else ("#8B6A45","   ")
                 st.markdown(
                     f"<div style='display:flex;justify-content:space-between;align-items:center;"
-                    f"padding:5px 0;border-bottom:1px solid #222'>"
-                    f"<span style='color:#ccc'>{flag} {label}</span>"
+                    f"padding:5px 0;border-bottom:1px solid #E8D5B7'>"
+                    f"<span style='color:#2C2218'>{flag} {label}</span>"
                     f"<span><b style='color:{clr}'>₹{per_100:.1f}</b>"
-                    f"<span style='color:#ccc'> per ₹100 earned</span> &nbsp;"
-                    f"<span style='color:#555;font-size:12px'>({_inr(amount)})</span></span>"
+                    f"<span style='color:#2C2218'> per ₹100 earned</span> &nbsp;"
+                    f"<span style='color:#8B6A45;font-size:12px'>({_inr(amount)})</span></span>"
                     f"</div>", unsafe_allow_html=True)
                 if per_100 > 40:
                     st.markdown(
                         f"<p style='color:{_RED};font-size:12px;margin:2px 0 4px 20px'>"
-                        f"This single expense is more than 40% of revenue — worth watching closely.</p>",
+                        f"This single expense is more than 40% of revenue, worth watching closely.</p>",
                         unsafe_allow_html=True)
 
 
@@ -410,10 +458,10 @@ def _hrow_both(emoji, title, r_txt, r_clr, e_txt, e_clr, action=None):
     for col, name, txt, clr in [(c1,"Rwox",r_txt,r_clr),(c2,"Elastohorse",e_txt,e_clr)]:
         with col:
             st.markdown(
-                f"<div style='background:#111;border-radius:8px;padding:14px;"
+                f"<div style='background:#FFF8F0;border-radius:8px;padding:14px;"
                 f"border-left:4px solid {clr};margin-bottom:8px'>"
                 f"<b style='color:{clr}'>{name}</b><br>"
-                f"<span style='color:#ccc;font-size:14px'>{txt}</span></div>",
+                f"<span style='color:#2C2218;font-size:14px'>{txt}</span></div>",
                 unsafe_allow_html=True)
     if action:
         st.markdown(f"<p style='color:{_YELLOW};font-size:13px;margin:0 0 6px 0'>💡 Action: {action}</p>",
@@ -424,9 +472,9 @@ def _hrow_both(emoji, title, r_txt, r_clr, e_txt, e_clr, action=None):
 def _hrow_single(emoji, title, txt, clr, action=None):
     st.markdown(f"#### {emoji} {title}")
     st.markdown(
-        f"<div style='background:#111;border-radius:8px;padding:14px;"
+        f"<div style='background:#FFF8F0;border-radius:8px;padding:14px;"
         f"border-left:4px solid {clr};margin-bottom:8px'>"
-        f"<span style='color:#ccc;font-size:14px'>{txt}</span></div>",
+        f"<span style='color:#2C2218;font-size:14px'>{txt}</span></div>",
         unsafe_allow_html=True)
     if action:
         st.markdown(f"<p style='color:{_YELLOW};font-size:13px;margin:0 0 6px 0'>💡 Action: {action}</p>",
@@ -456,18 +504,18 @@ def _tab_health(company: str) -> None:
         _hrow_both(_me(min(r_nm,e_nm)), "Are we making enough profit?",
             f"Keeping {r_nm:.1f}% of every sale as profit", _mc(r_nm),
             f"Keeping {e_nm:.1f}% of every sale as profit", _mc(e_nm),
-            "Rwox is below 5% — review expenses line by line and find what can be cut." if r_nm < 5 else None)
+            "Rwox is below 5%, review expenses line by line and find what can be cut." if r_nm < 5 else None)
 
         _hrow_both("✅" if (r_ok and e_ok) else "🔴", "Can we pay our bills next month?",
-            f"Monthly costs ≈ {_inr(r_me)}, cash = {_inr(r['cash_bank'])} — {'OK ✅' if r_ok else 'Tight 🔴'}",
+            f"Monthly costs ≈ {_inr(r_me)}, cash = {_inr(r['cash_bank'])}, {'OK ✅' if r_ok else 'Tight 🔴'}",
             _GREEN if r_ok else _RED,
-            f"Monthly costs ≈ {_inr(e_me)}, cash = {_inr(e['cash_bank'])} — {'OK ✅' if e_ok else 'Tight 🔴'}",
+            f"Monthly costs ≈ {_inr(e_me)}, cash = {_inr(e['cash_bank'])}, {'OK ✅' if e_ok else 'Tight 🔴'}",
             _GREEN if e_ok else _RED,
             "Chase outstanding payments. Hold off on big purchases until cash improves." if not (r_ok and e_ok) else None)
 
         _hrow_both("⚠️" if e["debtors"]>0 else "✅", "Are customers paying on time?",
-            "No outstanding customer payments — all clear", _GREEN,
-            f"Customers owe {_inr(e['debtors'])} — check if any invoice is older than 45 days",
+            "No outstanding customer payments, all clear", _GREEN,
+            f"Customers owe {_inr(e['debtors'])}, check if any invoice is older than 45 days",
             _YELLOW if e["debtors"]>0 else _GREEN,
             "Call the top 3 customers by amount owed. Ask for payment this week." if e["debtors"]>0 else None)
 
@@ -487,11 +535,11 @@ def _tab_health(company: str) -> None:
             f"Keeping {r_nm:.1f}% of every sale as profit after all expenses", _mc(r_nm),
             "Go line by line through expenses and find what can be cut this month." if r_nm < 5 else None)
         _hrow_single("✅" if r_ok else "🔴", "Can we pay our bills next month?",
-            f"Monthly costs ≈ {_inr(r_me)}, cash = {_inr(r['cash_bank'])} — {'enough to cover ✅' if r_ok else 'not enough 🔴'}",
+            f"Monthly costs ≈ {_inr(r_me)}, cash = {_inr(r['cash_bank'])}, {'enough to cover ✅' if r_ok else 'not enough 🔴'}",
             _GREEN if r_ok else _RED,
             "Chase outstanding payments right away. Hold off on big purchases." if not r_ok else None)
         _hrow_single("✅", "Are customers paying on time?",
-            "No outstanding customer payments for Rwox — all clear", _GREEN, None)
+            "No outstanding customer payments for Rwox, all clear", _GREEN, None)
         _hrow_single("⚠️" if r_sw else "✅", "Are we sitting on too much unsold stock?",
             f"{r_sm:.1f} months of stock sitting in the warehouse ({_inr(r['stock'])})",
             _YELLOW if r_sw else _GREEN,
@@ -501,11 +549,11 @@ def _tab_health(company: str) -> None:
         _hrow_single(_me(e_nm), "Are we making enough profit?",
             f"Keeping {e_nm:.1f}% of every sale as profit after all expenses", _mc(e_nm), None)
         _hrow_single("✅" if e_ok else "🔴", "Can we pay our bills next month?",
-            f"Monthly costs ≈ {_inr(e_me)}, cash = {_inr(e['cash_bank'])} — {'enough to cover ✅' if e_ok else 'not enough 🔴'}",
+            f"Monthly costs ≈ {_inr(e_me)}, cash = {_inr(e['cash_bank'])}, {'enough to cover ✅' if e_ok else 'not enough 🔴'}",
             _GREEN if e_ok else _RED,
             "Chase outstanding payments right away. Hold off on big purchases." if not e_ok else None)
         _hrow_single("⚠️" if e["debtors"]>0 else "✅", "Are customers paying on time?",
-            f"Customers owe {_inr(e['debtors'])} — check if any invoice is older than 45 days"
+            f"Customers owe {_inr(e['debtors'])}, check if any invoice is older than 45 days"
             if e["debtors"]>0 else "All customer payments are up to date",
             _YELLOW if e["debtors"]>0 else _GREEN,
             "Call the top 3 customers by amount owed. Ask for payment this week." if e["debtors"]>0 else None)
@@ -541,14 +589,14 @@ def _tab_monthly(conn, company: str, kp: str) -> None:
         if company == "both":
             sa, sb = st.columns(2)
             with sa:
-                r_sales = st.number_input("Rwox — Sales this month (₹)",
+                r_sales = st.number_input("Rwox: Sales this month (₹)",
                     min_value=0.0, step=10_000.0, format="%.0f", key=f"{kp}_mu_rs")
-                r_cash  = st.number_input("Rwox — Cash in bank today (₹)",
+                r_cash  = st.number_input("Rwox: Cash in bank today (₹)",
                     min_value=0.0, step=10_000.0, format="%.0f", key=f"{kp}_mu_rc")
             with sb:
-                e_sales = st.number_input("Elastohorse — Sales this month (₹)",
+                e_sales = st.number_input("Elastohorse: Sales this month (₹)",
                     min_value=0.0, step=10_000.0, format="%.0f", key=f"{kp}_mu_es")
-                e_cash  = st.number_input("Elastohorse — Cash in bank today (₹)",
+                e_cash  = st.number_input("Elastohorse: Cash in bank today (₹)",
                     min_value=0.0, step=10_000.0, format="%.0f", key=f"{kp}_mu_ec")
         elif company == "Rwox":
             col, _ = st.columns([1, 1])
@@ -565,16 +613,23 @@ def _tab_monthly(conn, company: str, kp: str) -> None:
                 e_cash  = st.number_input("Cash in bank today (₹)",
                     min_value=0.0, step=10_000.0, format="%.0f", key=f"{kp}_mu_ec")
 
-        st.markdown("**Main expenses this month** — one per line: Name, Amount")
+        st.markdown("**Main expenses this month**: one per line: Name, Amount")
         exp_text = st.text_area("E.g.  Raw materials, 500000", height=90,
                                 label_visibility="collapsed", key=f"{kp}_mu_exp")
-        st.markdown("**Payments due this month** — one per line: Name, Amount")
+        st.markdown("**Payments due this month**: one per line: Name, Amount")
         pay_text = st.text_area("E.g.  Loan repayment, 200000", height=70,
                                 label_visibility="collapsed", key=f"{kp}_mu_pay")
         notes    = st.text_area("Any notes?", height=60, key=f"{kp}_mu_notes")
         save_ok  = st.form_submit_button("Save Monthly Update", type="primary")
 
     if save_ok:
+        import re as _re
+        if not _re.fullmatch(r"\d{4}-\d{2}", month_str.strip()):
+            st.error("Month must be in YYYY-MM format (e.g. 2026-05).")
+            st.stop()
+        if r_sales == 0 and e_sales == 0:
+            st.warning("Both sales figures are zero, are you sure? Save anyway if correct.")
+
         def _parse(text):
             out = []
             for line in text.strip().splitlines():
@@ -611,11 +666,11 @@ def _tab_monthly(conn, company: str, kp: str) -> None:
         "FROM monthly_updates ORDER BY month ASC LIMIT 6"
     ).fetchall()
     if not rows:
-        st.info("No monthly updates yet — enter your first update above.")
+        st.info("No monthly updates yet, enter your first update above.")
         return
 
     st.divider()
-    st.markdown("#### Last 6 Months — Revenue Trend")
+    st.markdown("#### Last 6 Months: Revenue Trend")
     months = [r["month"] for r in rows]
     fig = go.Figure()
     if company in ("both", "Rwox"):
@@ -624,10 +679,10 @@ def _tab_monthly(conn, company: str, kp: str) -> None:
             hovertemplate="<b>Rwox</b><br>%{x}<br>₹%{y:,.0f}<extra></extra>"))
     if company in ("both", "Elastohorse"):
         fig.add_trace(go.Bar(x=months, y=[r["elastohorse_sales"] for r in rows],
-            name="Elastohorse", marker_color="#e67e22",
+            name="Elastohorse", marker_color="#1B7F4F",
             hovertemplate="<b>Elastohorse</b><br>%{x}<br>₹%{y:,.0f}<extra></extra>"))
     fig.update_layout(title="Monthly Sales", height=320, barmode="group",
-        xaxis=dict(gridcolor="#333"), yaxis=dict(gridcolor="#333", tickprefix="₹"),
+        xaxis=dict(gridcolor="#E8D5B7"), yaxis=dict(gridcolor="#E8D5B7", tickprefix="₹"),
         legend=dict(orientation="h", y=-0.3), **_PLOT)
     st.plotly_chart(fig, use_container_width=True, key=f"{kp}_monthly_chart")
 
@@ -657,13 +712,13 @@ def _tab_upload(conn, kp: str, default_company: str = "Rwox") -> None:
     st.subheader("Upload Financial Statements")
     st.caption(
         "Upload a P&L or Balance Sheet from Tally (PDF or Excel). "
-        "Numbers are extracted and displayed as a clean statement — "
+        "Numbers are extracted and displayed as a clean statement, "
         "**hover over any underlined term** to see a plain-English explanation."
     )
     st.markdown(_TOOLTIP_CSS, unsafe_allow_html=True)
 
     uploaded = st.file_uploader(
-        "Drop your file here — PDF or Excel",
+        "Drop your file here (PDF or Excel)",
         type=["pdf", "xlsx", "xls"],
         key=f"{kp}_uploader",
     )
@@ -698,7 +753,7 @@ def _tab_upload(conn, kp: str, default_company: str = "Rwox") -> None:
                     with st.expander("Raw text from PDF (first 1 500 chars)"):
                         st.text(full_text[:1500])
                 else:
-                    st.warning("No text found in this PDF — fill the numbers in manually below.")
+                    st.warning("No text found in this PDF, fill the numbers in manually below.")
             except ImportError:
                 st.warning("pdfplumber not installed. Run `pip install pdfplumber` to enable auto-extraction.")
             except Exception as exc:
@@ -723,7 +778,7 @@ def _tab_upload(conn, kp: str, default_company: str = "Rwox") -> None:
                             except (ValueError, TypeError):
                                 pass
                 stmt_type = "unknown"
-                st.info("Excel loaded — review the extracted data below.")
+                st.info("Excel loaded, review the extracted data below.")
             except ImportError:
                 st.warning("openpyxl not installed. Run `pip install openpyxl` to read Excel files.")
             except Exception as exc:
@@ -798,11 +853,11 @@ def _tab_upload(conn, kp: str, default_company: str = "Rwox") -> None:
                     cash_in = st.number_input("Cash in bank (₹)", min_value=0.0,
                         value=float(extracted.get("cash_bank", 0)),
                         step=1_000.0, format="%.0f", key=f"{kp}_up_cash")
-                    recv    = st.number_input("Customers owe us — Debtors (₹)", min_value=0.0,
+                    recv    = st.number_input("Customers owe us: Debtors (₹)", min_value=0.0,
                         value=float(extracted.get("receivables", 0)),
                         step=1_000.0, format="%.0f", key=f"{kp}_up_recv")
                 with nc2:
-                    pay  = st.number_input("We owe vendors — Creditors (₹)", min_value=0.0,
+                    pay  = st.number_input("We owe vendors: Creditors (₹)", min_value=0.0,
                         value=float(extracted.get("payables", 0)),
                         step=1_000.0, format="%.0f", key=f"{kp}_up_pay")
                     eq   = st.number_input("Net worth / equity (₹)", min_value=0.0,
@@ -834,8 +889,8 @@ def _tab_upload(conn, kp: str, default_company: str = "Rwox") -> None:
             note_html = (f"<br><span style='color:#666;font-size:12px'>{s['notes']}</span>"
                          if s["notes"] else "")
             st.markdown(
-                f"<div style='background:#1a1a1a;border-radius:8px;padding:12px 16px;"
-                f"margin-bottom:8px;border:1px solid #333'>"
+                f"<div style='background:#FFF8F0;border-radius:8px;padding:12px 16px;"
+                f"margin-bottom:8px;border:1px solid #E8D5B7'>"
                 f"<b style='color:{_BLUE}'>{s['company']}</b> &nbsp;·&nbsp; {s['snapshot_date']} "
                 f"&nbsp;·&nbsp; Cash: {_inr(s['cash_balance'] or 0)} &nbsp;·&nbsp; "
                 f"Debtors: {_inr(s['receivables'] or 0)} &nbsp;·&nbsp; "
@@ -850,7 +905,7 @@ _GROQ_MODEL   = "llama-3.3-70b-versatile"
 _SYSTEM_PROMPT = (
     "You are a trusted friend who also happens to be a sharp business advisor. "
     "You know this small Indian manufacturing and trading business well. "
-    "Speak plainly and honestly — like texting a friend, not writing a report. "
+    "Speak plainly and honestly, like texting a friend, not writing a report. "
     "Zero finance jargon. Use ₹ for money amounts. Be specific, not vague."
 )
 
@@ -882,7 +937,7 @@ def _build_context(company: str) -> str:
             f"  Unsold stock:  ₹{e['stock']:,.0f}  ({e_sm:.1f} months)\n"
             f"  Loan interest: ₹{313_895:,.0f}/year (implies significant borrowing)\n"
         )
-    return "Business: Reclaimr — Indian manufacturing and trading group\n\n" + "\n".join(parts)
+    return "Business: Reclaimr, Indian manufacturing and trading group\n\n" + "\n".join(parts)
 
 
 def _groq_call(user_prompt: str) -> str:
@@ -903,11 +958,11 @@ def _groq_call(user_prompt: str) -> str:
 
 def _advice_box(label: str, text: str) -> None:
     st.markdown(
-        f"<div style='background:#0d2137;border-radius:12px;padding:22px 24px;"
-        f"border:1px solid #1a4a7a;margin-top:10px'>"
+        f"<div style='background:#FFF0DC;border-radius:12px;padding:22px 24px;"
+        f"border:1px solid #E8D5B7;margin-top:10px'>"
         f"<h4 style='color:{_BLUE};margin:0 0 12px 0'>{label}</h4>"
-        f"<p style='color:#ddd;line-height:1.85;font-size:15px;margin:0'>"
-        f"{text.replace(chr(10)+chr(10),'</p><p style=&quot;color:#ddd;line-height:1.85;font-size:15px;margin:8px 0 0 0&quot;>').replace(chr(10),'<br>')}"
+        f"<p style='color:#2C2218;line-height:1.85;font-size:15px;margin:0'>"
+        f"{text.replace(chr(10)+chr(10),'</p><p style=&quot;color:#2C2218;line-height:1.85;font-size:15px;margin:8px 0 0 0&quot;>').replace(chr(10),'<br>')}"
         f"</p></div>", unsafe_allow_html=True)
 
 
@@ -925,7 +980,7 @@ def _tab_ai(company: str, kp: str) -> None:
         context = _build_context(company)
         prompt  = (
             f"Based on the financial data below, write exactly 3 short paragraphs "
-            f"(no headers or bullets — plain paragraphs only):\n"
+            f"(no headers or bullets, plain paragraphs only):\n"
             f"Paragraph 1: What is going well ✅ (2-3 sentences)\n"
             f"Paragraph 2: What needs attention ⚠️ (2-3 sentences)\n"
             f"Paragraph 3: One specific action to take this week 🎯 (1-2 sentences)\n\n"
@@ -944,7 +999,7 @@ def _tab_ai(company: str, kp: str) -> None:
 
     st.divider()
     st.markdown("#### Ask a Specific Question")
-    st.caption("Any question about the business — a direct, data-informed answer in seconds.")
+    st.caption("Any question about the business, a direct, data-informed answer in seconds.")
     question = st.text_input("Your question",
         placeholder="e.g. Should I hire another worker for Rwox right now?",
         label_visibility="collapsed", key=f"{kp}_ai_q")
@@ -985,10 +1040,30 @@ def _render_view(conn, company: str, kp: str) -> None:
     with inner[5]: _tab_ai(company, kp)
 
 
+_LOGO_HTML = (
+    "<div style='text-align:center;padding:20px 0 10px 0'>"
+    "<svg width='80' height='80' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'>"
+    "<path d='M 68 18 A 48 48 0 1 0 96 50' fill='none' stroke='#C17F3E' stroke-width='5' stroke-linecap='round'/>"
+    "<polygon points='96,36 82,52 104,54' fill='#C17F3E'/>"
+    "<circle cx='50' cy='50' r='10' fill='#C17F3E'/>"
+    "<circle cx='50' cy='50' r='4.5' fill='transparent'/>"
+    "</svg>"
+    "<div style='font-family:DM Sans,sans-serif;font-size:20px;font-weight:700;color:#C17F3E;margin-top:6px'>Reclaimr</div>"
+    "<div style='font-family:DM Sans,sans-serif;font-size:9px;letter-spacing:2px;color:#8B6A45;margin-top:2px'>MANUFACTURING ERP</div>"
+    "</div>"
+)
+
+
 def render_financials_page(conn) -> None:
+    _dark = st.session_state.get("dark_mode", False)
+    st.markdown(_DARK_CSS if _dark else _WARM_CSS, unsafe_allow_html=True)
+    st.sidebar.markdown(_LOGO_HTML, unsafe_allow_html=True)
+    global _PLOT
+    _PLOT = dict(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                 font_color="#F5E6D3" if _dark else "#2C2218", margin=dict(t=45, b=30, l=10, r=10))
     _ensure_tables(conn)
     st.header("Financial Pulse")
-    st.caption("Your live financial dashboard — margins, cash position, and business health without waiting for year-end statements.")
+    st.caption("Your live financial dashboard, margins, cash position, and business health without waiting for year-end statements.")
 
     outer = st.tabs(["📊 Both Companies", "🏭 Rwox", "🏪 Elastohorse"])
     with outer[0]: _render_view(conn, "both",        "fb")

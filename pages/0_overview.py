@@ -13,11 +13,57 @@ def _get_conn():
     return init_db(Path("db") / "erp.db")
 
 
-_GREEN  = "#2ecc71"
-_YELLOW = "#f39c12"
-_RED    = "#e74c3c"
-_BLUE   = "#3498db"
+_GREEN  = "#1B7F4F"
+_YELLOW = "#D97706"
+_RED    = "#C0392B"
+_BLUE   = "#C17F3E"
 _GROQ_MODEL = "llama-3.3-70b-versatile"
+
+_WARM_CSS = (
+    "<style>"
+    "@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600&display=swap');"
+    "* { font-family: 'DM Sans', sans-serif !important; }"
+    "[class*='material-symbols'] { font-family: 'Material Symbols Rounded' !important; }"
+    "[data-testid='metric-container']{background:#FFF8F0;border:1px solid #E8D5B7;"
+    "border-radius:10px;padding:14px 18px}"
+    "[data-testid='stMetricValue']{color:#2C2218}"
+    "[data-testid='stMetricLabel']{color:#8B6A45}"
+    "hr{border-color:#E8D5B7!important}"
+    "h1{border-bottom:3px solid #C17F3E;padding-bottom:6px;display:inline-block}"
+    "h2,h3{color:#2C2218}"
+    "[data-testid='stDataFrame'] th{background:#FFF8F0!important;color:#2C2218!important;"
+    "border:1px solid #E8D5B7!important}"
+    "[data-testid='stDataFrame'] td{border-color:#E8D5B7!important}"
+    "div[data-baseweb='input']{border:1px solid #C5A882!important;border-radius:6px!important}div[data-baseweb='textarea']{border:1px solid #C5A882!important;border-radius:6px!important}div[data-baseweb='select'] > div:first-child{border:1px solid #C5A882!important;border-radius:6px!important}"
+    "</style>"
+)
+_DARK_CSS = (
+    "<style>"
+    "@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600&display=swap');"
+    "* { font-family: 'DM Sans', sans-serif !important; }"
+    "[class*='material-symbols'] { font-family: 'Material Symbols Rounded' !important; }"
+    "[data-testid='stAppViewContainer']{background:#1A1410!important}"
+    "[data-testid='stHeader']{background:#1A1410!important}"
+    "[data-testid='metric-container']{background:#2C2218!important;border:1px solid #4A3728!important;"
+    "border-radius:10px;padding:14px 18px}"
+    "[data-testid='stMetricValue']{color:#F5E6D3!important}"
+    "[data-testid='stMetricLabel']{color:#C4A882!important}"
+    "[data-testid='stSidebar']{background:#1E160E!important}"
+    "hr{border-color:#4A3728!important}"
+    "h1{border-bottom:3px solid #C17F3E;padding-bottom:6px;display:inline-block;color:#F5E6D3!important}"
+    "h2,h3{color:#F5E6D3!important}"
+    "[data-testid='stDataFrame'] th{background:#2C2218!important;color:#F5E6D3!important;"
+    "border:1px solid #4A3728!important}"
+    "[data-testid='stDataFrame'] td{border-color:#4A3728!important}"
+    "div[data-baseweb='input']{border:1px solid #4A3728!important;border-radius:6px!important;background:#231C14!important}"
+    "div[data-baseweb='input'] input{background:#231C14!important;color:#F5E6D3!important}"
+    "div[data-baseweb='textarea']{border:1px solid #4A3728!important;border-radius:6px!important;background:#231C14!important}"
+    "div[data-baseweb='textarea'] textarea{background:#231C14!important;color:#F5E6D3!important}"
+    "div[data-baseweb='select'] > div:first-child{border:1px solid #4A3728!important;border-radius:6px!important;background:#231C14!important}"
+    "[data-testid='stForm']{background:#2C2218!important;border-color:#4A3728!important}"
+    "[data-testid='stExpander'] details{background:#2C2218!important;border-color:#4A3728!important}"
+    "</style>"
+)
 _SYSTEM_PROMPT = (
     "You are a trusted friend who is also a sharp business advisor for Reclaimr — "
     "a small Indian manufacturing and trading business (Rwox manufactures rubber reclaiming "
@@ -187,39 +233,57 @@ def _build_ai_context(conn):
 
 
 def _card(icon, label, value, sub, alert=False, warn=False):
-    bg     = "#2a0a0a" if alert else ("#2a2000" if warn else "#0d1b2a")
-    border = _RED if alert else (_YELLOW if warn else "#1a3a5a")
-    vcol   = _RED if alert else (_YELLOW if warn else "#fff")
+    bg     = "#FFF0EE" if alert else ("#FFFDE0" if warn else "#FFF8F0")
+    border = _RED if alert else (_YELLOW if warn else "#E8D5B7")
+    vcol   = _RED if alert else (_YELLOW if warn else "#2C2218")
     return (
         f"<div style='background:{bg};border-radius:10px;padding:16px 14px;"
         f"border:1px solid {border};text-align:center;min-height:116px'>"
         f"<div style='font-size:22px'>{icon}</div>"
         f"<div style='color:{vcol};font-size:22px;font-weight:700;margin:4px 0'>{value}</div>"
-        f"<div style='color:#999;font-size:12px;line-height:1.3'>{label}</div>"
-        f"<div style='color:#555;font-size:11px;margin-top:4px'>{sub}</div>"
+        f"<div style='color:#8B6A45;font-size:12px;line-height:1.3'>{label}</div>"
+        f"<div style='color:#8B6A45;font-size:11px;margin-top:4px'>{sub}</div>"
         f"</div>"
     )
 
 
 def _row(icon, text, color):
     return (
-        f"<div style='background:#1a1a1a;border-radius:8px;padding:14px 18px;"
-        f"margin-bottom:8px;border-left:4px solid {color}'>"
-        f"<span style='color:#ddd;font-size:14px'>{icon} {text}</span>"
+        f"<div style='background:#FFF8F0;border-radius:8px;padding:14px 18px;"
+        f"margin-bottom:8px;border-left:4px solid {color};border:1px solid #E8D5B7;"
+        f"border-left:4px solid {color}'>"
+        f"<span style='color:#2C2218;font-size:14px'>{icon} {text}</span>"
         f"</div>"
     )
 
 
 def _week_item(top, bottom):
     return (
-        f"<div style='background:#1a1a1a;border-radius:6px;padding:9px 12px;margin-bottom:6px'>"
-        f"<span style='color:#ddd;font-size:13px'>{top}</span><br>"
-        f"<span style='color:#666;font-size:11px'>{bottom}</span>"
+        f"<div style='background:#FFF8F0;border-radius:6px;padding:9px 12px;margin-bottom:6px;"
+        f"border:1px solid #E8D5B7'>"
+        f"<span style='color:#2C2218;font-size:13px'>{top}</span><br>"
+        f"<span style='color:#8B6A45;font-size:11px'>{bottom}</span>"
         f"</div>"
     )
 
 
+_LOGO_HTML = (
+    "<div style='text-align:center;padding:20px 0 10px 0'>"
+    "<svg width='80' height='80' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'>"
+    "<path d='M 68 18 A 48 48 0 1 0 96 50' fill='none' stroke='#C17F3E' stroke-width='5' stroke-linecap='round'/>"
+    "<polygon points='96,36 82,52 104,54' fill='#C17F3E'/>"
+    "<circle cx='50' cy='50' r='10' fill='#C17F3E'/>"
+    "<circle cx='50' cy='50' r='4.5' fill='transparent'/>"
+    "</svg>"
+    "<div style='font-family:DM Sans,sans-serif;font-size:20px;font-weight:700;color:#C17F3E;margin-top:6px'>Reclaimr</div>"
+    "<div style='font-family:DM Sans,sans-serif;font-size:9px;letter-spacing:2px;color:#8B6A45;margin-top:2px'>MANUFACTURING ERP</div>"
+    "</div>"
+)
+
+
 def render_intelligence_page(conn):
+    st.markdown(_DARK_CSS if st.session_state.get("dark_mode") else _WARM_CSS, unsafe_allow_html=True)
+    st.sidebar.markdown(_LOGO_HTML, unsafe_allow_html=True)
     _ensure_tables(conn)
     today = date.today()
     now_str = datetime.now().strftime("%H:%M")
@@ -275,14 +339,14 @@ def render_intelligence_page(conn):
         status_color = _RED
 
     st.markdown(
-        f"<div style='background:#0d1b2a;border-radius:14px;padding:24px 28px;"
-        f"border:1px solid #1a3a5a;margin-bottom:20px'>"
-        f"<h2 style='color:#fff;margin:0 0 4px 0'>Good morning 👋</h2>"
-        f"<p style='color:#888;font-size:15px;margin:0 0 10px 0'>"
+        f"<div style='background:#FFF8F0;border-radius:14px;padding:24px 28px;"
+        f"border:1px solid #E8D5B7;margin-bottom:20px'>"
+        f"<h2 style='color:#2C2218;margin:0 0 4px 0'>Good morning 👋</h2>"
+        f"<p style='color:#8B6A45;font-size:15px;margin:0 0 10px 0'>"
         f"{today.strftime('%A, %d %B %Y')}</p>"
         f"<p style='color:{status_color};font-size:18px;font-weight:600;margin:0 0 8px 0'>"
         f"{status_line}</p>"
-        f"<p style='color:#444;font-size:12px;margin:0'>Last updated: {now_str}</p>"
+        f"<p style='color:#8B6A45;font-size:12px;margin:0'>Last updated: {now_str}</p>"
         f"</div>",
         unsafe_allow_html=True,
     )
@@ -324,11 +388,11 @@ def render_intelligence_page(conn):
         if "intel_answer" in st.session_state:
             q_text, a_text = st.session_state["intel_answer"]
             st.markdown(
-                f"<div style='background:#0d2137;border-radius:12px;padding:18px 22px;"
-                f"border:1px solid #1a4a7a;margin-bottom:8px'>"
-                f"<p style='color:#3498db;font-size:12px;margin:0 0 6px 0'>"
+                f"<div style='background:#FFF0DC;border-radius:12px;padding:18px 22px;"
+                f"border:1px solid #E8D5B7;margin-bottom:8px'>"
+                f"<p style='color:#C17F3E;font-size:12px;margin:0 0 6px 0'>"
                 f"You asked: <i>{q_text}</i></p>"
-                f"<p style='color:#ddd;line-height:1.8;font-size:15px;margin:0'>"
+                f"<p style='color:#2C2218;line-height:1.8;font-size:15px;margin:0'>"
                 f"{a_text.replace(chr(10), '<br>')}"
                 f"</p></div>",
                 unsafe_allow_html=True,
@@ -396,7 +460,7 @@ def render_intelligence_page(conn):
         ORDER BY o.expected_dispatch_date ASC
     """).fetchall():
         actions.append((r["days_late"], "📦", _RED,
-            f"Dispatch <b>{r['customer_name']}</b> order — {r['product']} "
+            f"Dispatch <b>{r['customer_name']}</b> order: {r['product']} "
             f"<span style='color:{_RED}'>({r['days_late']} {'day' if r['days_late']==1 else 'days'} overdue)</span>",
             "dispatch", r["id"]))
 
@@ -411,7 +475,7 @@ def render_intelligence_page(conn):
         ORDER BY days DESC
     """).fetchall():
         actions.append((r["days"], "💰", _RED,
-            f"Chase payment from <b>{r['customer_name']}</b> — "
+            f"Chase payment from <b>{r['customer_name']}</b>, "
             f"{_inr(r['balance'])} outstanding for "
             f"<span style='color:{_RED}'>{r['days']} days</span>",
             "contacted", r["id"]))
@@ -429,7 +493,7 @@ def render_intelligence_page(conn):
         customer = r["customer_name"] or "unknown customer"
         actions.append((r["days_open"], "⚠️", _YELLOW,
             f"Follow up on <b>{r['issue_type']}</b> from <b>{customer}</b> "
-            f"(batch {r['batch_ref']}) — "
+            f"(batch {r['batch_ref']}), "
             f"<span style='color:{_YELLOW}'>{r['days_open']} days open</span>",
             "resolve_complaint", r["id"]))
 
@@ -444,7 +508,7 @@ def render_intelligence_page(conn):
         ORDER BY days DESC
     """).fetchall():
         actions.append((r["days"], "🧾", _YELLOW,
-            f"Pay <b>{r['vendor_name']}</b> — "
+            f"Pay <b>{r['vendor_name']}</b>, "
             f"{_inr(r['balance'])} due, "
             f"<span style='color:{_YELLOW}'>{r['days']} days outstanding</span>",
             None, None))
@@ -458,7 +522,7 @@ def render_intelligence_page(conn):
         ORDER BY waiting_days DESC
     """).fetchall():
         actions.append((r["waiting_days"], "🏭", _YELLOW,
-            f"Start production for <b>{r['customer_name']}</b> — {r['product']}, "
+            f"Start production for <b>{r['customer_name']}</b>: {r['product']}, "
             f"waiting <span style='color:{_YELLOW}'>{r['waiting_days']} days</span>, "
             f"due {r['expected_dispatch_date']}",
             "to_production", r["id"]))
@@ -474,9 +538,9 @@ def render_intelligence_page(conn):
 
     if not actions:
         st.markdown(
-            "<div style='background:#0d2a0d;border-radius:10px;padding:20px 24px;"
-            "border:1px solid #1a5a1a;text-align:center'>"
-            "<span style='color:#2ecc71;font-size:18px;font-weight:600'>"
+            "<div style='background:#F0FFF4;border-radius:10px;padding:20px 24px;"
+            "border:1px solid #E8D5B7;text-align:center'>"
+            "<span style='color:#1B7F4F;font-size:18px;font-weight:600'>"
             "✅ All clear — nothing urgent today</span>"
             "</div>",
             unsafe_allow_html=True,
@@ -490,9 +554,10 @@ def render_intelligence_page(conn):
                 bcol = None
             with tcol:
                 st.markdown(
-                    f"<div style='background:#1a1a1a;border-radius:8px;padding:14px 18px;"
-                    f"margin-bottom:4px;border-left:4px solid {color}'>"
-                    f"<span style='color:#ddd;font-size:14px'>{icon} {text}</span>"
+                    f"<div style='background:#FFF8F0;border-radius:8px;padding:14px 18px;"
+                    f"margin-bottom:4px;border-left:4px solid {color};border:1px solid #E8D5B7;"
+                    f"border-left:4px solid {color}'>"
+                    f"<span style='color:#2C2218;font-size:14px'>{icon} {text}</span>"
                     f"</div>",
                     unsafe_allow_html=True,
                 )
@@ -540,7 +605,7 @@ def render_intelligence_page(conn):
         """, (today_s, week_end_s)).fetchall()
         if rows:
             st.markdown("".join(_week_item(
-                f"<b>{r['customer_name']}</b> — {r['product']}",
+                f"<b>{r['customer_name']}</b>: {r['product']}",
                 f"{r['expected_dispatch_date']} · {r['company']}"
             ) for r in rows), unsafe_allow_html=True)
         else:

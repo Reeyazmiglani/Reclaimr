@@ -1,6 +1,11 @@
+import os
+import json
 import streamlit as st
+import streamlit.components.v1 as components
 from datetime import date, datetime
 from pathlib import Path
+from dotenv import load_dotenv
+from groq import Groq
 from db.schema import init_db
 
 
@@ -43,12 +48,148 @@ def _resolve_batch_ref(sel, manual, label_to_ref):
     """Convert form selection + manual input to the batch_reference value to save."""
     if sel == "Not yet produced / Enter manually":
         return manual.strip() or None
-    if sel == "— Not assigned —":
+    if sel == "(Not assigned)":
         return None
     return label_to_ref.get(sel)
 
 
+_WARM_CSS = (
+    "<style>"
+    "@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600&display=swap');"
+    "* { font-family: 'DM Sans', sans-serif !important; }"
+    "[class*='material-symbols'] { font-family: 'Material Symbols Rounded' !important; }"
+    "[data-testid='metric-container']{background:#FFF8F0;border:1px solid #E8D5B7;"
+    "border-radius:10px;padding:14px 18px}"
+    "[data-testid='stMetricValue']{color:#2C2218}"
+    "[data-testid='stMetricLabel']{color:#8B6A45}"
+    "[data-testid='stSidebar']{background:#FFF0DC!important}"
+    "hr{border-color:#E8D5B7!important}"
+    "h1{border-bottom:3px solid #C17F3E;padding-bottom:6px;display:inline-block}"
+    "h2,h3{color:#2C2218}"
+    "[data-testid='stDataFrame'] th{background:#FFF8F0!important;color:#2C2218!important;"
+    "border:1px solid #E8D5B7!important}"
+    "[data-testid='stDataFrame'] td{border-color:#E8D5B7!important}"
+    "div[data-baseweb='input']{border:1px solid #C5A882!important;border-radius:6px!important}div[data-baseweb='textarea']{border:1px solid #C5A882!important;border-radius:6px!important}div[data-baseweb='select'] > div:first-child{border:1px solid #C5A882!important;border-radius:6px!important}"
+    "</style>"
+)
+_DARK_CSS = (
+    "<style>"
+    "@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600&display=swap');"
+    "* { font-family: 'DM Sans', sans-serif !important; }"
+    "[class*='material-symbols'] { font-family: 'Material Symbols Rounded' !important; }"
+    "[data-testid='stAppViewContainer']{background:#1A1410!important}"
+    "[data-testid='stHeader']{background:#1A1410!important}"
+    "[data-testid='metric-container']{background:#2C2218!important;border:1px solid #4A3728!important;"
+    "border-radius:10px;padding:14px 18px}"
+    "[data-testid='stMetricValue']{color:#F5E6D3!important}"
+    "[data-testid='stMetricLabel']{color:#C4A882!important}"
+    "[data-testid='stSidebar']{background:#1E160E!important}"
+    "hr{border-color:#4A3728!important}"
+    "h1{border-bottom:3px solid #C17F3E;padding-bottom:6px;display:inline-block;color:#F5E6D3!important}"
+    "h2,h3{color:#F5E6D3!important}"
+    "[data-testid='stDataFrame'] th{background:#2C2218!important;color:#F5E6D3!important;"
+    "border:1px solid #4A3728!important}"
+    "[data-testid='stDataFrame'] td{border-color:#4A3728!important}"
+    "div[data-baseweb='input']{border:1px solid #4A3728!important;border-radius:6px!important;background:#231C14!important}"
+    "div[data-baseweb='input'] input{background:#231C14!important;color:#F5E6D3!important}"
+    "div[data-baseweb='textarea']{border:1px solid #4A3728!important;border-radius:6px!important;background:#231C14!important}"
+    "div[data-baseweb='textarea'] textarea{background:#231C14!important;color:#F5E6D3!important}"
+    "div[data-baseweb='select'] > div:first-child{border:1px solid #4A3728!important;border-radius:6px!important;background:#231C14!important}"
+    "[data-testid='stForm']{background:#2C2218!important;border-color:#4A3728!important}"
+    "[data-testid='stExpander'] details{background:#2C2218!important;border-color:#4A3728!important}"
+    "</style>"
+)
+
+
+_VOICE_JS = """
+<div style="margin:0;padding:4px 0">
+  <button id="vbtn" onclick="startVoice()"
+    style="background:#1A1410;border:1px solid #C17F3E;color:#C17F3E;
+           padding:8px 18px;border-radius:6px;cursor:pointer;
+           font-size:14px;font-family:DM Sans,sans-serif;font-weight:500">
+    🎤 Speak Order
+  </button>
+  <span id="vstatus"
+    style="margin-left:12px;font-size:13px;color:#8B6A45;font-family:DM Sans,sans-serif"></span>
+</div>
+<script>
+function startVoice() {
+  var btn = document.getElementById('vbtn');
+  var sta = document.getElementById('vstatus');
+  var SR  = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { sta.textContent = '⚠ Use Chrome or Edge for voice input'; return; }
+  btn.disabled = true;
+  btn.textContent = '⏺ Listening…';
+  sta.textContent = '';
+  var r = new SR();
+  r.lang = 'en-IN';
+  r.continuous = false;
+  r.interimResults = false;
+  r.onresult = function(e) {
+    var text = e.results[0][0].transcript;
+    sta.textContent = '✓ ' + text;
+    var base = window.parent.location.href.split('?')[0];
+    window.parent.location.href = base + '?vt=' + encodeURIComponent(text);
+  };
+  r.onerror = function(e) {
+    sta.textContent = '⚠ ' + (e.error === 'not-allowed' ? 'Microphone access denied' : e.error);
+    btn.disabled = false;
+    btn.textContent = '🎤 Speak Order';
+  };
+  r.start();
+}
+</script>
+"""
+
+
+def _extract_order_from_voice(text: str):
+    load_dotenv()
+    api_key = os.getenv("GROQ_API_KEY")
+    if not api_key:
+        return None
+    try:
+        client = Groq(api_key=api_key)
+        resp = client.chat.completions.create(
+            model="llama3-8b-8192",
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "Extract order details from this spoken text and return ONLY a JSON object "
+                        "with these exact keys: company, customer_name, product, quantity, unit, "
+                        "rate, rate_type, expected_dispatch. If any field is not mentioned set it "
+                        "to null. company must be 'Rwox' or 'Elastohorse'. "
+                        "unit must be one of: kg, tonnes, litres, bags, units. "
+                        "rate_type must be 'Per Unit' or 'Overall Total'. "
+                        "expected_dispatch must be in YYYY-MM-DD format if mentioned."
+                    ),
+                },
+                {"role": "user", "content": text},
+            ],
+            response_format={"type": "json_object"},
+        )
+        return json.loads(resp.choices[0].message.content)
+    except Exception:
+        return None
+
+
+_LOGO_HTML = (
+    "<div style='text-align:center;padding:20px 0 10px 0'>"
+    "<svg width='80' height='80' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'>"
+    "<path d='M 68 18 A 48 48 0 1 0 96 50' fill='none' stroke='#C17F3E' stroke-width='5' stroke-linecap='round'/>"
+    "<polygon points='96,36 82,52 104,54' fill='#C17F3E'/>"
+    "<circle cx='50' cy='50' r='10' fill='#C17F3E'/>"
+    "<circle cx='50' cy='50' r='4.5' fill='transparent'/>"
+    "</svg>"
+    "<div style='font-family:DM Sans,sans-serif;font-size:20px;font-weight:700;color:#C17F3E;margin-top:6px'>Reclaimr</div>"
+    "<div style='font-family:DM Sans,sans-serif;font-size:9px;letter-spacing:2px;color:#8B6A45;margin-top:2px'>MANUFACTURING ERP</div>"
+    "</div>"
+)
+
+
 def render_orders_page(conn):
+    st.markdown(_DARK_CSS if st.session_state.get("dark_mode") else _WARM_CSS, unsafe_allow_html=True)
+    st.sidebar.markdown(_LOGO_HTML, unsafe_allow_html=True)
     # Ensure batch_reference column exists on cached connections
     try:
         conn.execute("ALTER TABLE orders ADD COLUMN batch_reference TEXT")
@@ -78,6 +219,19 @@ def render_orders_page(conn):
         st.query_params.clear()
         st.rerun()
 
+    # ── Voice transcript from JS component ───────────────────────────────────────
+    if "vt" in st.query_params:
+        _raw = st.query_params["vt"]
+        st.query_params.clear()
+        with st.spinner("Processing voice input with AI..."):
+            _extracted = _extract_order_from_voice(_raw)
+        if _extracted:
+            st.session_state["voice_prefill"] = _extracted
+            st.session_state["voice_raw"] = _raw
+        else:
+            st.session_state["voice_error"] = True
+        st.rerun()
+
     # ── Edit form ────────────────────────────────────────────────────────────────
     editing_id = st.session_state.get("editing_order_id")
     if editing_id:
@@ -91,7 +245,7 @@ def render_orders_page(conn):
             st.subheader(f"Editing Order #{editing_id}")
 
             e_b_labels, e_b_label_to_ref = _prod_batch_options(conn)
-            e_batch_opts = ["— Not assigned —"] + e_b_labels + ["Not yet produced / Enter manually"]
+            e_batch_opts = ["(Not assigned)"] + e_b_labels + ["Not yet produced / Enter manually"]
             existing_batch = order["batch_reference"] or ""
             e_default_label = next((l for l, r in e_b_label_to_ref.items() if r == existing_batch), None)
             if e_default_label:
@@ -138,32 +292,33 @@ def render_orders_page(conn):
                     value=date.fromisoformat(order["expected_dispatch_date"]),
                 )
 
-                st.markdown("**Batch Reference (optional)**")
-                e_batch_sel = st.selectbox(
-                    "Select batch", e_batch_opts, index=e_batch_default_idx
-                )
-                e_batch_manual = st.text_input(
-                    "Manual batch ref",
-                    value=e_batch_manual_default,
-                    placeholder="e.g. Batch-001",
-                    help="Used when 'Not yet produced / Enter manually' is selected above",
-                )
-                st.caption("Once production is done, go to Production and log the batch to keep records complete.")
-
                 e_status = st.selectbox(
                     "Status",
                     ORDER_STATUSES,
                     index=ORDER_STATUSES.index(order["status"]) if order["status"] in ORDER_STATUSES else 0,
+                    format_func=lambda s: s.replace("_", " ").title(),
                 )
 
-                st.markdown("**Dispatch & Transport (optional)**")
-                ev1, ev2 = st.columns(2)
-                with ev1:
-                    e_transport = st.text_input("Transport via (carrier/person)", value=order["transport_via"] or "")
-                    e_dispatch_time = st.text_input("Dispatch time (e.g. 10:00 AM)", value=order["dispatch_time"] or "")
-                with ev2:
-                    e_delivery_deadline = st.text_input("Delivery deadline (e.g. by 5 PM / next day)", value=order["delivery_deadline"] or "")
-                e_notes = st.text_area("Notes", value=order["notes"] or "")
+                with st.expander("Batch reference (optional)"):
+                    e_batch_sel = st.selectbox(
+                        "Select batch", e_batch_opts, index=e_batch_default_idx
+                    )
+                    e_batch_manual = st.text_input(
+                        "Manual ref",
+                        value=e_batch_manual_default,
+                        placeholder="e.g. Batch-001",
+                        help="Used when 'Not yet produced / Enter manually' is selected above",
+                    )
+                    st.caption("Once production is done, go to Production and log the batch to keep records complete.")
+
+                with st.expander("Transport & notes (optional)"):
+                    ev1, ev2 = st.columns(2)
+                    with ev1:
+                        e_transport = st.text_input("Carrier / person", value=order["transport_via"] or "")
+                        e_dispatch_time = st.text_input("Dispatch time", value=order["dispatch_time"] or "")
+                    with ev2:
+                        e_delivery_deadline = st.text_input("Deadline", value=order["delivery_deadline"] or "")
+                    e_notes = st.text_area("Notes", value=order["notes"] or "")
 
                 save_col, cancel_col, _ = st.columns([1, 1, 6])
                 with save_col:
@@ -205,45 +360,94 @@ def render_orders_page(conn):
 
     # ── New order form ───────────────────────────────────────────────────────────
     b_labels, b_label_to_ref = _prod_batch_options(conn)
-    batch_opts = ["— Not assigned —"] + b_labels + ["Not yet produced / Enter manually"]
+    batch_opts = ["(Not assigned)"] + b_labels + ["Not yet produced / Enter manually"]
 
+    # ── Optional voice input ─────────────────────────────────────────────────────
+    with st.expander("🎤 Voice Input — speak to auto-fill the form (optional)"):
+        components.html(_VOICE_JS, height=52)
+        st.caption("Click the mic, speak your order details, and the form below will be pre-filled automatically. Works in Chrome and Edge.")
+
+        if st.session_state.get("voice_error"):
+            st.error("Could not extract order details — please try again or fill the form manually.")
+            st.session_state.pop("voice_error", None)
+
+        pf = st.session_state.get("voice_prefill", {})
+        if pf:
+            raw = st.session_state.get("voice_raw", "")
+            st.success(f'Extracted from: "{raw}"')
+            mc1, mc2, mc3, mc4 = st.columns(4)
+            mc1.metric("Company", pf.get("company") or "—")
+            mc2.metric("Customer", pf.get("customer_name") or "—")
+            mc3.metric("Product", pf.get("product") or "—")
+            mc4.metric("Qty / Rate", f"{pf.get('quantity') or '—'} {pf.get('unit') or ''} @ {pf.get('rate') or '—'}")
+            st.caption("The form below is pre-filled. Edit any field before saving.")
+            if st.button("✕ Clear voice pre-fill", key="clear_voice"):
+                st.session_state.pop("voice_prefill", None)
+                st.session_state.pop("voice_raw", None)
+                st.rerun()
+
+    pf = st.session_state.get("voice_prefill", {})
+
+    # ── Manual / pre-filled form ─────────────────────────────────────────────────
     with st.form("order_form"):
-        company = st.selectbox("Company", COMPANIES)
-        customer_name = st.text_input("Customer name")
-        product_choice = st.selectbox("Product", PRODUCTS)
-        product = st.text_input("Specify product") if product_choice == "Other" else product_choice
+        _co_idx = COMPANIES.index(pf["company"]) if pf.get("company") in COMPANIES else 0
+        company = st.selectbox("Company", COMPANIES, index=_co_idx)
+
+        customer_name = st.text_input("Customer name", value=pf.get("customer_name") or "")
+
+        _pv = pf.get("product") or ""
+        _pi = PRODUCTS.index(_pv) if _pv in PRODUCTS else 0
+        product_choice = st.selectbox("Product", PRODUCTS, index=_pi)
+        if product_choice == "Other":
+            product = st.text_input("Specify product", value=_pv if _pv not in PRODUCTS else "")
+        else:
+            product = product_choice
 
         qty_col, unit_col = st.columns([2, 1])
         with qty_col:
-            quantity = st.number_input("Quantity", min_value=1, value=1, step=1)
+            try:
+                _qty = max(1, int(float(pf["quantity"]))) if pf.get("quantity") else 1
+            except (ValueError, TypeError):
+                _qty = 1
+            quantity = st.number_input("Quantity", min_value=1, value=_qty, step=1)
         with unit_col:
-            quantity_unit = st.selectbox("Unit", UNITS)
+            _ui = UNITS.index(pf["unit"]) if pf.get("unit") in UNITS else 0
+            quantity_unit = st.selectbox("Unit", UNITS, index=_ui)
 
         rate_col, rate_type_col = st.columns([2, 1])
         with rate_col:
-            rate = st.number_input("Rate", min_value=0.0, value=0.0, step=0.5, format="%.2f")
+            try:
+                _rate = float(pf["rate"]) if pf.get("rate") else 0.0
+            except (ValueError, TypeError):
+                _rate = 0.0
+            rate = st.number_input("Rate", min_value=0.0, value=_rate, step=0.5, format="%.2f")
         with rate_type_col:
-            rate_type_label = st.selectbox("Rate type", RATE_TYPE_OPTIONS)
+            _rti = RATE_TYPE_OPTIONS.index(pf["rate_type"]) if pf.get("rate_type") in RATE_TYPE_OPTIONS else 0
+            rate_type_label = st.selectbox("Rate type", RATE_TYPE_OPTIONS, index=_rti)
 
-        expected_dispatch_date = st.date_input("Expected dispatch date", value=date.today())
+        try:
+            _dd = date.fromisoformat(pf["expected_dispatch"]) if pf.get("expected_dispatch") else date.today()
+        except (ValueError, TypeError):
+            _dd = date.today()
+        expected_dispatch_date = st.date_input("Dispatch date", value=_dd)
 
-        st.markdown("**Batch Reference (optional)**")
-        batch_sel = st.selectbox("Select batch", batch_opts)
-        batch_manual = st.text_input(
-            "Manual batch ref",
-            placeholder="e.g. Batch-001",
-            help="Used when 'Not yet produced / Enter manually' is selected above",
-        )
-        st.caption("Once production is done, go to Production and log the batch to keep records complete.")
+        with st.expander("Batch reference (optional)"):
+            batch_sel = st.selectbox("Select batch", batch_opts)
+            batch_manual = st.text_input(
+                "Manual ref",
+                placeholder="e.g. Batch-001",
+                help="Used when 'Not yet produced / Enter manually' is selected above",
+            )
+            st.caption("Once production is done, go to Production and log the batch to keep records complete.")
 
-        st.markdown("**Dispatch & Transport (optional)**")
-        dv1, dv2 = st.columns(2)
-        with dv1:
-            transport_via = st.text_input("Transport via (carrier/person)")
-            dispatch_time = st.text_input("Dispatch time (e.g. 10:00 AM)")
-        with dv2:
-            delivery_deadline = st.text_input("Delivery deadline (e.g. by 5 PM / next day)")
-        notes = st.text_area("Notes")
+        with st.expander("Transport & notes (optional)"):
+            dv1, dv2 = st.columns(2)
+            with dv1:
+                transport_via = st.text_input("Carrier / person")
+                dispatch_time = st.text_input("Dispatch time")
+            with dv2:
+                delivery_deadline = st.text_input("Deadline")
+            notes = st.text_area("Notes")
 
         submitted = st.form_submit_button("Save Order")
 
@@ -272,6 +476,8 @@ def render_orders_page(conn):
                     ),
                 )
                 conn.commit()
+                st.session_state.pop("voice_prefill", None)
+                st.session_state.pop("voice_raw", None)
                 st.success("Order saved.")
 
     # ══════════════════════════════════════════════════════════════════════════════
@@ -288,7 +494,8 @@ def render_orders_page(conn):
     with fc:
         filter_company = st.selectbox("Company", ["All"] + COMPANIES, key="f_company")
     with fd:
-        filter_status = st.selectbox("Status", ["All"] + ORDER_STATUSES, key="f_status")
+        filter_status = st.selectbox("Status", ["All"] + ORDER_STATUSES, key="f_status",
+                                    format_func=lambda s: s if s == "All" else s.replace("_", " ").title())
 
     fe, ff, fg = st.columns([1.8, 1.8, 1])
     with fe:
@@ -329,30 +536,41 @@ def render_orders_page(conn):
     total  = conn.execute("SELECT COUNT(*) FROM orders").fetchone()[0]
 
     if not orders:
-        st.info("No orders match — adjust the filters above." if total > 0 else "No orders yet. Use the form above to record the first one.")
+        st.info("No orders match, adjust the filters above." if total > 0 else "No orders yet. Use the form above to record the first one.")
     else:
         if len(orders) < total:
-            st.caption(f"Showing {len(orders)} of {total} orders — some filtered out")
+            st.caption(f"Showing {len(orders)} of {total} orders, some filtered out")
+
+        show_batch = st.toggle("Show batch column", value=False, key="show_batch_col")
+        if show_batch:
+            _cols_use = _COLS
+            _hdrs_use = _HDRS
+        else:
+            _cols_use = [0.35, 0.65, 1.5, 1.4, 0.8, 1.0, 1.0, 1.6, 0.7, 0.7]
+            _hdrs_use = ["ID", "Co.", "Customer", "Product", "Qty", "Rate", "Dispatch", "Status", "", ""]
 
         today_str = date.today().isoformat()
+        _dark = st.session_state.get("dark_mode", False)
+        _txt = "#F5E6D3" if _dark else "#2C2218"
+        _lbl_clr = "#C4A882" if _dark else "#8B6A45"
+        _div_border = "#4A3728" if _dark else "#E8D5B7"
 
-        hdr = st.columns(_COLS)
-        for col, lbl in zip(hdr, _HDRS):
+        hdr = st.columns(_cols_use)
+        for col, lbl in zip(hdr, _hdrs_use):
             col.markdown(
-                f"<span style='font-size:12px;color:#888;text-transform:uppercase;"
+                f"<span style='font-size:12px;color:{_lbl_clr};text-transform:uppercase;"
                 f"letter-spacing:0.04em'>{lbl}</span>",
                 unsafe_allow_html=True,
             )
-        st.markdown("<div style='border-bottom:1px solid #333;margin:2px 0 4px'></div>",
+        st.markdown("<div style='border-bottom:2px solid #C17F3E;margin:2px 0 4px'></div>",
                     unsafe_allow_html=True)
 
         for o in orders:
             overdue = (o["expected_dispatch_date"] < today_str
                        and o["status"] not in ("dispatched", "cancelled"))
-            clr  = "color:#e74c3c;" if overdue else ""
-            cell = f"{clr}font-size:14px;padding-top:8px"
+            cell = f"color:#C0392B;font-size:14px;padding-top:8px" if overdue else f"color:{_txt};font-size:14px;padding-top:8px"
 
-            r = st.columns(_COLS)
+            r = st.columns(_cols_use)
             r[0].markdown(f"<div style='{cell}'>{o['id']}</div>", unsafe_allow_html=True)
             r[1].markdown(f"<div style='{cell}'>{o['company']}</div>", unsafe_allow_html=True)
             r[2].markdown(f"<div style='{cell}'>{o['customer_name']}</div>", unsafe_allow_html=True)
@@ -363,24 +581,30 @@ def render_orders_page(conn):
                 f"<div style='{cell};white-space:nowrap'>{o['rate']} {rate_lbl}</div>",
                 unsafe_allow_html=True,
             )
-            r[6].markdown(f"<div style='{cell}'>{o['expected_dispatch_date']}</div>", unsafe_allow_html=True)
-            batch_display = o["batch_reference"] or "—"
-            r[7].markdown(
-                f"<div style='{cell};color:#aaa;font-size:13px'>{batch_display}</div>",
-                unsafe_allow_html=True,
-            )
+            r[6].markdown(f"<div style='{cell};white-space:nowrap'>{o['expected_dispatch_date']}</div>", unsafe_allow_html=True)
+
+            if show_batch:
+                batch_display = o["batch_reference"] or "—"
+                r[7].markdown(
+                    f"<div style='{cell};color:{_lbl_clr};font-size:13px'>{batch_display}</div>",
+                    unsafe_allow_html=True,
+                )
+                status_col, edit_col, del_col = r[8], r[9], r[10]
+            else:
+                status_col, edit_col, del_col = r[7], r[8], r[9]
 
             cur_idx  = ORDER_STATUSES.index(o["status"]) if o["status"] in ORDER_STATUSES else 0
-            new_status = r[8].selectbox(
+            new_status = status_col.selectbox(
                 "", ORDER_STATUSES, index=cur_idx,
                 key=f"s_{o['id']}", label_visibility="collapsed",
+                format_func=lambda s: s.replace("_", " ").title(),
             )
 
-            if r[9].button("✏", key=f"e_{o['id']}", use_container_width=True, help="Edit"):
+            if edit_col.button("✏", key=f"e_{o['id']}", use_container_width=True, help="Edit"):
                 st.session_state["editing_order_id"] = o["id"]
                 st.rerun()
 
-            if r[10].button("✕", key=f"d_{o['id']}", use_container_width=True, help="Delete"):
+            if del_col.button("✕", key=f"d_{o['id']}", use_container_width=True, help="Delete"):
                 st.session_state["confirm_delete_id"] = o["id"]
                 st.rerun()
 
@@ -388,6 +612,11 @@ def render_orders_page(conn):
                 conn.execute("UPDATE orders SET status=? WHERE id=?", (new_status, o["id"]))
                 conn.commit()
                 st.rerun()
+
+            st.markdown(
+                f"<div style='border-bottom:1px solid {_div_border};margin:2px 0'></div>",
+                unsafe_allow_html=True,
+            )
 
     # ── Delete confirmation ──────────────────────────────────────────────────────
     confirm_delete_id = st.session_state.get("confirm_delete_id")
@@ -398,7 +627,7 @@ def render_orders_page(conn):
         ).fetchone()
         if row:
             st.warning(
-                f"Delete order #{row['id']} ({row['customer_name']} — {row['product']})? "
+                f"Delete order #{row['id']} ({row['customer_name']}, {row['product']})? "
                 "This cannot be undone."
             )
             yes_col, no_col, _ = st.columns([1, 1, 8])

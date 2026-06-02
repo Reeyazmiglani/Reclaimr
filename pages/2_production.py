@@ -1,8 +1,12 @@
+import os
 import json
 import math
 import streamlit as st
+import streamlit.components.v1 as components
 from datetime import date as date_type, time as time_type, datetime, timedelta
 from pathlib import Path
+from dotenv import load_dotenv
+from groq import Groq
 from db.schema import init_db
 
 
@@ -11,17 +15,64 @@ def _get_conn():
     return init_db(Path("db") / "erp.db")
 
 
+_WARM_CSS = (
+    "<style>"
+    "@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600&display=swap');"
+    "* { font-family: 'DM Sans', sans-serif !important; }"
+    "[class*='material-symbols'] { font-family: 'Material Symbols Rounded' !important; }"
+    "[data-testid='metric-container']{background:#FFF8F0;border:1px solid #E8D5B7;"
+    "border-radius:10px;padding:14px 18px}"
+    "[data-testid='stMetricValue']{color:#2C2218}"
+    "[data-testid='stMetricLabel']{color:#8B6A45}"
+    "hr{border-color:#E8D5B7!important}"
+    "h1{border-bottom:3px solid #C17F3E;padding-bottom:6px;display:inline-block}"
+    "h2,h3{color:#2C2218}"
+    "[data-testid='stDataFrame'] th{background:#FFF8F0!important;color:#2C2218!important;"
+    "border:1px solid #E8D5B7!important}"
+    "[data-testid='stDataFrame'] td{border-color:#E8D5B7!important}"
+    "div[data-baseweb='input']{border:1px solid #C5A882!important;border-radius:6px!important}div[data-baseweb='textarea']{border:1px solid #C5A882!important;border-radius:6px!important}div[data-baseweb='select'] > div:first-child{border:1px solid #C5A882!important;border-radius:6px!important}"
+    "</style>"
+)
+_DARK_CSS = (
+    "<style>"
+    "@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600&display=swap');"
+    "* { font-family: 'DM Sans', sans-serif !important; }"
+    "[class*='material-symbols'] { font-family: 'Material Symbols Rounded' !important; }"
+    "[data-testid='stAppViewContainer']{background:#1A1410!important}"
+    "[data-testid='stHeader']{background:#1A1410!important}"
+    "[data-testid='metric-container']{background:#2C2218!important;border:1px solid #4A3728!important;"
+    "border-radius:10px;padding:14px 18px}"
+    "[data-testid='stMetricValue']{color:#F5E6D3!important}"
+    "[data-testid='stMetricLabel']{color:#C4A882!important}"
+    "[data-testid='stSidebar']{background:#1E160E!important}"
+    "hr{border-color:#4A3728!important}"
+    "h1{border-bottom:3px solid #C17F3E;padding-bottom:6px;display:inline-block;color:#F5E6D3!important}"
+    "h2,h3{color:#F5E6D3!important}"
+    "[data-testid='stDataFrame'] th{background:#2C2218!important;color:#F5E6D3!important;"
+    "border:1px solid #4A3728!important}"
+    "[data-testid='stDataFrame'] td{border-color:#4A3728!important}"
+    "div[data-baseweb='input']{border:1px solid #4A3728!important;border-radius:6px!important;background:#231C14!important}"
+    "div[data-baseweb='input'] input{background:#231C14!important;color:#F5E6D3!important}"
+    "div[data-baseweb='textarea']{border:1px solid #4A3728!important;border-radius:6px!important;background:#231C14!important}"
+    "div[data-baseweb='textarea'] textarea{background:#231C14!important;color:#F5E6D3!important}"
+    "div[data-baseweb='select'] > div:first-child{border:1px solid #4A3728!important;border-radius:6px!important;background:#231C14!important}"
+    "[data-testid='stForm']{background:#2C2218!important;border-color:#4A3728!important}"
+    "[data-testid='stExpander'] details{background:#2C2218!important;border-color:#4A3728!important}"
+    "</style>"
+)
+
 TABLE_CSS = (
     "<style>"
     ".orders-table{width:100%;border-collapse:collapse;font-size:14px;margin-bottom:16px}"
-    ".orders-table th,.orders-table td{border:1px solid #444;padding:8px 12px;text-align:left;vertical-align:middle}"
-    ".orders-table thead tr{background-color:#2a2a2a}"
-    ".orders-table tbody tr:hover{background-color:#1e2a3a}"
-    ".act-btn{display:inline-block;padding:3px 10px;margin:0 2px;border:1px solid #555;"
-    "border-radius:4px;text-decoration:none;color:#fff;font-size:12px;white-space:nowrap}"
-    ".act-btn:hover{background-color:#3a3a3a;text-decoration:none;color:#fff}"
-    ".act-btn.del{border-color:#c0392b;color:#e74c3c}"
-    ".act-btn.del:hover{background-color:#2d1b1b}"
+    ".orders-table th,.orders-table td{border:1px solid #E8D5B7;padding:8px 12px;text-align:left;vertical-align:middle}"
+    ".orders-table thead tr{background:#FFF0DC;color:#2C2218;font-weight:600}"
+    ".orders-table tbody tr:nth-child(even){background:#FFF8F0}"
+    ".orders-table tbody tr:hover{background:#FFEDD5}"
+    ".act-btn{display:inline-block;padding:3px 0;margin:0 2px;min-width:38px;text-align:center;border:1px solid #E8D5B7;"
+    "border-radius:4px;text-decoration:none;color:#2C2218;font-size:12px;white-space:nowrap}"
+    ".act-btn:hover{background:#FFF0DC;text-decoration:none;color:#2C2218}"
+    ".act-btn.del{border-color:#C0392B;color:#C0392B}"
+    ".act-btn.del:hover{background:#FFF0EE}"
     "</style>"
 )
 
@@ -31,9 +82,9 @@ def _order_options(conn, company_id):
         "SELECT id, customer_name, product FROM orders WHERE company_id = ? ORDER BY id DESC",
         (company_id,),
     ).fetchall()
-    opts = {"— None —": None}
+    opts = {"(None)": None}
     for r in rows:
-        opts[f"#{r['id']} — {r['customer_name']} — {r['product']}"] = r["id"]
+        opts[f"#{r['id']}, {r['customer_name']}, {r['product']}"] = r["id"]
     return opts
 
 
@@ -185,8 +236,94 @@ def _ensure_tables(conn):
     conn.commit()
 
 
+_VOICE_JS_PROD = """
+<div style="margin:0;padding:4px 0">
+  <button id="vbtn" onclick="startVoice()"
+    style="background:#1A1410;border:1px solid #C17F3E;color:#C17F3E;
+           padding:8px 18px;border-radius:6px;cursor:pointer;
+           font-size:14px;font-family:DM Sans,sans-serif;font-weight:500">
+    🎤 Speak Batch
+  </button>
+  <span id="vstatus"
+    style="margin-left:12px;font-size:13px;color:#8B6A45;font-family:DM Sans,sans-serif"></span>
+</div>
+<script>
+function startVoice() {
+  var btn = document.getElementById('vbtn');
+  var sta = document.getElementById('vstatus');
+  var SR  = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { sta.textContent = '⚠ Use Chrome or Edge for voice input'; return; }
+  btn.disabled = true;
+  btn.textContent = '⏺ Listening…';
+  sta.textContent = '';
+  var r = new SR();
+  r.lang = 'en-IN';
+  r.continuous = false;
+  r.interimResults = false;
+  r.onresult = function(e) {
+    var text = e.results[0][0].transcript;
+    sta.textContent = '✓ ' + text;
+    var base = window.parent.location.href.split('?')[0];
+    window.parent.location.href = base + '?vt_prod=' + encodeURIComponent(text);
+  };
+  r.onerror = function(e) {
+    sta.textContent = '⚠ ' + (e.error === 'not-allowed' ? 'Microphone access denied' : e.error);
+    btn.disabled = false;
+    btn.textContent = '🎤 Speak Batch';
+  };
+  r.start();
+}
+</script>
+"""
+
+
+def _extract_production_from_voice(text: str):
+    load_dotenv()
+    api_key = os.getenv("GROQ_API_KEY")
+    if not api_key:
+        return None
+    try:
+        client = Groq(api_key=api_key)
+        resp = client.chat.completions.create(
+            model="llama3-8b-8192",
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "Extract production batch details from this spoken text and return ONLY a JSON object "
+                        "with these exact keys: batch_ref, date, purple_kg, wax_kg, mc_kg. "
+                        "If any field is not mentioned set it to null. "
+                        "date must be in YYYY-MM-DD format if mentioned. "
+                        "purple_kg, wax_kg, mc_kg must be numeric (kg values)."
+                    ),
+                },
+                {"role": "user", "content": text},
+            ],
+            response_format={"type": "json_object"},
+        )
+        return json.loads(resp.choices[0].message.content)
+    except Exception:
+        return None
+
+
+_LOGO_HTML = (
+    "<div style='text-align:center;padding:20px 0 10px 0'>"
+    "<svg width='80' height='80' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'>"
+    "<path d='M 68 18 A 48 48 0 1 0 96 50' fill='none' stroke='#C17F3E' stroke-width='5' stroke-linecap='round'/>"
+    "<polygon points='96,36 82,52 104,54' fill='#C17F3E'/>"
+    "<circle cx='50' cy='50' r='10' fill='#C17F3E'/>"
+    "<circle cx='50' cy='50' r='4.5' fill='transparent'/>"
+    "</svg>"
+    "<div style='font-family:DM Sans,sans-serif;font-size:20px;font-weight:700;color:#C17F3E;margin-top:6px'>Reclaimr</div>"
+    "<div style='font-family:DM Sans,sans-serif;font-size:9px;letter-spacing:2px;color:#8B6A45;margin-top:2px'>MANUFACTURING ERP</div>"
+    "</div>"
+)
+
+
 def render_production_page(conn):
     _ensure_tables(conn)
+    st.markdown(_DARK_CSS if st.session_state.get("dark_mode") else _WARM_CSS, unsafe_allow_html=True)
+    st.sidebar.markdown(_LOGO_HTML, unsafe_allow_html=True)
     st.header("Production")
     st.caption("Daily production logs give you visibility into output, quality, and whether committed delivery dates are still on track.")
 
@@ -210,6 +347,18 @@ def render_production_page(conn):
         elif action == "del" and entry_id:
             st.session_state["confirm_del_prod_id"] = entry_id
         st.query_params.clear()
+        st.rerun()
+
+    if "vt_prod" in st.query_params:
+        _raw = st.query_params["vt_prod"]
+        st.query_params.clear()
+        with st.spinner("Processing voice input with AI..."):
+            _ext = _extract_production_from_voice(_raw)
+        if _ext:
+            st.session_state["voice_prod_prefill"] = _ext
+            st.session_state["voice_prod_raw"] = _raw
+        else:
+            st.session_state["voice_prod_error"] = True
         st.rerun()
 
     # ── Monthly summary ────────────────────────────────────────────────────────
@@ -290,7 +439,7 @@ def render_production_page(conn):
                 with ecc5:
                     st.text_input("5kg cartons (auto)", value=str(math.floor(e_b5 / 20)), disabled=True)
 
-                e_rej = st.number_input("Rejections/wastage kg", min_value=0.0, value=float(entry["rejections_kg"] or 0), step=0.1, format="%.2f")
+                e_rej = st.number_input("Rejections (kg)", min_value=0.0, value=float(entry["rejections_kg"] or 0), step=0.1, format="%.2f")
 
                 st.markdown("**Linked orders**")
                 existing_alloc_labels = [k for k, v in non_none_order_opts.items() if v in existing_allocs]
@@ -309,7 +458,7 @@ def render_production_page(conn):
                             min_value=0.0, value=float(akg), step=0.5, format="%.2f",
                             key=f"e_alloc_{oid}",
                         )
-                    st.caption("Newly selected orders will be added with 0 kg — save and re-edit to set allocations.")
+                    st.caption("Newly selected orders will be added with 0 kg, save and re-edit to set allocations.")
 
                 # ── Batch Costing (edit) ───────────────────────────────────────
                 st.markdown("**Batch Costing**")
@@ -342,7 +491,7 @@ def render_production_page(conn):
                     if auto_mc_cost:
                         st.caption(f"Auto: {_inr(auto_mc_cost)}")
                 e_overhead = st.number_input(
-                    "Overhead cost (₹) — labour, utilities, packaging",
+                    "Overhead cost (₹): labour, utilities, packaging",
                     min_value=0.0,
                     value=float(entry["overhead_cost"] or 0.0),
                     step=100.0, format="%.2f", key="e_overhead",
@@ -353,13 +502,13 @@ def render_production_page(conn):
                 em1.metric("Total Batch Cost", _inr(e_total_cost))
                 em2.metric("Cost / kg", _inr(e_cpkg))
 
-                st.markdown("**Temperature Log** — one reading per line: `HH:MM | temp°C | note`")
+                st.markdown("**Temperature Log**: one reading per line: `HH:MM | temp°C | note`")
                 temp_str = "\n".join(
                     f"{t['time']} | {t['temp']} | {t.get('note','')}"
                     for t in saved_temps
                 ) if saved_temps else ""
                 e_temp_text = st.text_area("Temperature readings", value=temp_str, height=120)
-                e_notes = st.text_area("Additional notes", value=entry["additional_notes"] or "")
+                e_notes = st.text_area("Notes", value=entry["additional_notes"] or "")
 
                 sv, ca, _ = st.columns([1, 1, 6])
                 with sv:
@@ -376,7 +525,7 @@ def render_production_page(conn):
                 with st.expander("Cost edit history"):
                     for ce in cost_edits:
                         st.markdown(
-                            f"**{ce['edited_at']}** — Purple: {_inr(ce['purple_cost'] or 0)}, "
+                            f"**{ce['edited_at']}**: Purple: {_inr(ce['purple_cost'] or 0)}, "
                             f"Wax: {_inr(ce['wax_cost'] or 0)}, MC: {_inr(ce['mc_cost'] or 0)}, "
                             f"Overhead: {_inr(ce['overhead_cost'] or 0)}, "
                             f"Total: {_inr(ce['total_cost'] or 0)}, "
@@ -458,13 +607,51 @@ def render_production_page(conn):
             st.divider()
 
     # ── New entry ──────────────────────────────────────────────────────────────
+    with st.expander("🎤 Voice Input — speak to auto-fill (optional)"):
+        components.html(_VOICE_JS_PROD, height=52)
+        st.caption("Example: 'Batch B-001, 200 kg purple, 80 kg wax, 20 kg MC'")
+        if st.session_state.get("voice_prod_error"):
+            st.error("Could not extract details — fill the form manually.")
+            st.session_state.pop("voice_prod_error", None)
+        _vp = st.session_state.get("voice_prod_prefill", {})
+        if _vp:
+            st.success(f'Extracted from: "{st.session_state.get("voice_prod_raw", "")}"')
+            vc1, vc2, vc3, vc4 = st.columns(4)
+            vc1.metric("Batch Ref", _vp.get("batch_ref") or "—")
+            vc2.metric("Purple (kg)", _vp.get("purple_kg") or "—")
+            vc3.metric("Wax (kg)", _vp.get("wax_kg") or "—")
+            vc4.metric("MC (kg)", _vp.get("mc_kg") or "—")
+            ap_col, cl_col, _ = st.columns([1, 1, 4])
+            with ap_col:
+                if st.button("✓ Apply to form", key="apply_vprod", type="primary"):
+                    if _vp.get("batch_ref"):
+                        st.session_state["p_batch"] = str(_vp["batch_ref"])
+                    for _fk, _sk in [("purple_kg", "p_purple"), ("wax_kg", "p_wax"), ("mc_kg", "p_mc")]:
+                        try:
+                            st.session_state[_sk] = float(_vp[_fk]) if _vp.get(_fk) else 0.0
+                        except (ValueError, TypeError):
+                            pass
+                    if _vp.get("date"):
+                        try:
+                            st.session_state["p_date"] = date_type.fromisoformat(_vp["date"])
+                        except (ValueError, TypeError):
+                            pass
+                    st.session_state.pop("voice_prod_prefill", None)
+                    st.session_state.pop("voice_prod_raw", None)
+                    st.rerun()
+            with cl_col:
+                if st.button("✕ Clear", key="clr_vprod"):
+                    st.session_state.pop("voice_prod_prefill", None)
+                    st.session_state.pop("voice_prod_raw", None)
+                    st.rerun()
+
     st.subheader("Log a New Run")
 
     fd, fb = st.columns(2)
     with fd:
         prod_date = st.date_input("Date *", value=date_type.today(), key="p_date")
     with fb:
-        batch_ref = st.text_input("Batch reference * (e.g. Batch-001)", key="p_batch")
+        batch_ref = st.text_input("Batch ref * (e.g. Batch-001)", key="p_batch")
 
     st.markdown("**Materials used (kg) \\***")
     fp, fw, fm = st.columns(3)
@@ -476,7 +663,7 @@ def render_production_page(conn):
         mc_kg = st.number_input("MC", min_value=0.0, value=0.0, step=0.5, format="%.2f", key="p_mc")
 
     output_kg = round((purple_kg + wax_kg + mc_kg) * 0.9, 2)
-    st.text_input("Output kg — auto (sum × 0.9)", value=str(output_kg), disabled=True, key="p_out")
+    st.text_input("Output kg (auto: sum × 0.9)", value=str(output_kg), disabled=True, key="p_out")
 
     # ── Batch Costing (new entry) ──────────────────────────────────────────────
     with st.expander("Batch Costing", expanded=True):
@@ -521,7 +708,7 @@ def render_production_page(conn):
             )
 
         overhead_cost = st.number_input(
-            "Overhead cost (₹) — labour, utilities, packaging",
+            "Overhead cost (₹): labour, utilities, packaging",
             min_value=0.0, value=0.0, step=100.0, format="%.2f", key="p_overhead",
             help="One manual field for all overhead: labour, electricity, packaging, etc.",
         )
@@ -534,7 +721,7 @@ def render_production_page(conn):
         sm2.metric("Total Batch Cost", _inr(total_batch_cost))
         sm3.metric("Cost / kg", _inr(cost_per_kg) if cost_per_kg else "—")
 
-    with st.expander("Machine timing (optional — captures run duration)"):
+    with st.expander("Machine timing (optional, captures run duration)"):
         fs1, fs2 = st.columns(2)
         with fs1:
             use_start = st.checkbox("Set start time", key="p_use_start")
@@ -551,7 +738,7 @@ def render_production_page(conn):
                 overnight = " (overnight)" if machine_end < machine_start else ""
                 st.text_input("Total run time", value=label + overnight, disabled=True, key="p_rt")
 
-    with st.expander("Bottles & cartons (optional — auto-calculates cartons at 20 per box)"):
+    with st.expander("Bottles & cartons (optional, auto-calculates cartons at 20 per box)"):
         fb1, fb5 = st.columns(2)
         with fb1:
             bottles_1kg = st.number_input("1kg bottles filled", min_value=0, value=0, step=1, key="p_b1")
@@ -566,13 +753,13 @@ def render_production_page(conn):
             st.text_input("5kg cartons (÷20)", value=str(cartons_5kg), disabled=True, key="p_c5")
 
     with st.expander("Rejections & order allocations (optional)"):
-        rejections_kg = st.number_input("Rejections/wastage kg", min_value=0.0, value=0.0, step=0.1, format="%.2f", key="p_rej")
+        rejections_kg = st.number_input("Rejections (kg)", min_value=0.0, value=0.0, step=0.1, format="%.2f", key="p_rej")
         order_opts = _order_options(conn, company_id)
         non_none_labels = [k for k, v in order_opts.items() if v is not None]
         linked_orders = st.multiselect("Linked orders", non_none_labels, key="p_orders")
 
         if linked_orders:
-            st.markdown("**Batch Allocation** — specify how many kg from this batch go to each order")
+            st.markdown("**Batch Allocation**: specify how many kg from this batch go to each order")
             for lo in linked_orders:
                 oid = order_opts[lo]
                 st.number_input(f"kg → {lo}", min_value=0.0, value=0.0, step=0.5, format="%.2f", key=f"alloc_{oid}")
@@ -582,8 +769,8 @@ def render_production_page(conn):
             )
             if output_kg > 0 and total_allocated > output_kg:
                 st.markdown(
-                    f"<span style='color:#e74c3c'>⚠ <b>{total_allocated:.1f} kg allocated</b> out of "
-                    f"<b>{output_kg:.1f} kg</b> produced — over-allocated!</span>",
+                    f"<span style='color:#C0392B'>⚠ <b>{total_allocated:.1f} kg allocated</b> out of "
+                    f"<b>{output_kg:.1f} kg</b> produced, over-allocated!</span>",
                     unsafe_allow_html=True,
                 )
             elif output_kg > 0:
@@ -598,14 +785,14 @@ def render_production_page(conn):
             )
             if est_revenue > 0:
                 margin = round((est_revenue - total_batch_cost) / est_revenue * 100, 1)
-                margin_color = "#2ecc71" if margin >= 15 else ("#f39c12" if margin >= 10 else "#e74c3c")
+                margin_color = "#1B7F4F" if margin >= 15 else ("#D97706" if margin >= 10 else "#C0392B")
                 st.markdown(
                     f"Est. Revenue: **{_inr(est_revenue)}** · Est. Margin: "
                     f"<span style='color:{margin_color};font-weight:bold'>{margin}%</span>",
                     unsafe_allow_html=True,
                 )
 
-    with st.expander("Temperature log (optional — up to 6 readings)"):
+    with st.expander("Temperature log (optional, up to 6 readings)"):
         if "temp_row_ids" not in st.session_state:
             st.session_state["temp_row_ids"] = []
         if "temp_row_ctr" not in st.session_state:
@@ -740,7 +927,7 @@ def render_production_page(conn):
     logs = conn.execute(lsql, lqp).fetchall()
 
     if not logs:
-        st.info("No entries match — adjust the filters above.")
+        st.info("No entries match, adjust the filters above.")
     else:
         rows_html = ""
         for lg in logs:
@@ -797,7 +984,7 @@ def render_production_page(conn):
             "SELECT id, batch_ref, date FROM production_logs WHERE id = ?", (confirm_del_id,)
         ).fetchone()
         if del_row:
-            st.warning(f"Delete entry #{del_row['id']} — {del_row['batch_ref']} on {del_row['date']}? Cannot be undone.")
+            st.warning(f"Delete entry #{del_row['id']}, {del_row['batch_ref']} on {del_row['date']}? Cannot be undone.")
             yc, nc, _ = st.columns([1, 1, 8])
             with yc:
                 if st.button("Yes, delete", type="primary"):
@@ -841,7 +1028,7 @@ def _render_cost_summary(conn, company_id):
     ).fetchall()
 
     if not rows:
-        st.info("No cost data yet — log a batch with costs to see the summary.")
+        st.info("No cost data yet, log a batch with costs to see the summary.")
         return
 
     header = (
@@ -855,12 +1042,12 @@ def _render_cost_summary(conn, company_id):
         if rev and rev > 0 and total_cost:
             margin = round((rev - total_cost) / rev * 100, 1)
             margin_str = f"{margin}%"
-            row_bg = "#1a3a1a" if margin >= 15 else ("#3a3000" if margin >= 10 else "#3a1a1a")
-            margin_color = "#2ecc71" if margin >= 15 else ("#f39c12" if margin >= 10 else "#e74c3c")
+            row_bg = "#F0FFF4" if margin >= 15 else ("#FFFDE0" if margin >= 10 else "#FFF0EE")
+            margin_color = "#1B7F4F" if margin >= 15 else ("#D97706" if margin >= 10 else "#C0392B")
         else:
             margin_str = "—"
-            row_bg = "#2a2a2a"
-            margin_color = "#888"
+            row_bg = "#FFF8F0"
+            margin_color = "#8B6A45"
 
         body += (
             f"<tr style='background:{row_bg}'>"
@@ -892,15 +1079,15 @@ def _render_complaints(conn, company_id):
     with st.expander("Log a New Complaint or Return", expanded=False):
         c_batch_label = st.selectbox(
             "Batch reference",
-            ["— Select batch —"] + list(batch_opts.keys()),
+            ["(Select batch)"] + list(batch_opts.keys()),
             key="c_batch",
         )
 
-        complaint_order_opts = {"— None —": None}
-        if c_batch_label != "— Select batch —":
+        complaint_order_opts = {"(None)": None}
+        if c_batch_label != "(Select batch)":
             bid_sel = batch_opts[c_batch_label]
             for r in _orders_linked_to_batch(conn, bid_sel):
-                complaint_order_opts[f"#{r['id']} — {r['customer_name']} — {r['product']}"] = r["id"]
+                complaint_order_opts[f"#{r['id']}, {r['customer_name']}, {r['product']}"] = r["id"]
 
         c_order_label = st.selectbox("Linked order", list(complaint_order_opts.keys()), key="c_order")
 
@@ -924,7 +1111,7 @@ def _render_complaints(conn, company_id):
         c_desc = st.text_area("Issue description", key="c_desc", height=100,
                               placeholder="What exactly is the problem?")
         c_qty_affected = st.number_input(
-            "Quantity affected (kg) — optional", min_value=0.0, value=0.0, step=0.1, format="%.2f", key="c_qty_affected"
+            "Quantity affected (kg), optional", min_value=0.0, value=0.0, step=0.1, format="%.2f", key="c_qty_affected"
         )
         c_physical = st.checkbox("Physical return? (product is actually coming back)", key="c_physical")
         c_qty_returned = 0.0
@@ -940,7 +1127,7 @@ def _render_complaints(conn, company_id):
         c_logged_by = st.text_input("Logged by", key="c_logged_by")
 
         if st.button("Submit Complaint", type="primary", key="c_submit"):
-            if c_batch_label == "— Select batch —":
+            if c_batch_label == "(Select batch)":
                 st.error("Select a batch reference.")
             elif not c_desc.strip():
                 st.error("Issue description is required.")
@@ -977,7 +1164,7 @@ def _render_complaints(conn, company_id):
     if open_complaints:
         with st.expander("Add Follow-up Update to an Existing Complaint", expanded=False):
             upd_opts = {
-                f"#{c['id']} — {c['batch_ref']} — {c['customer_name'] or '?'} ({c['issue_type']}) [{c['status']}]": c["id"]
+                f"#{c['id']}, {c['batch_ref']}, {c['customer_name'] or '?'} ({c['issue_type']}) [{c['status']}]": c["id"]
                 for c in open_complaints
             }
             upd_sel = st.selectbox("Select complaint", list(upd_opts.keys()), key="upd_sel")
@@ -1035,11 +1222,11 @@ def _render_complaints(conn, company_id):
     for c in all_complaints:
         icon, label = STATUS_STYLE.get(c["status"], ("⚪", c["status"].upper()))
         title = (
-            f"{icon} #{c['id']} — {c['batch_ref']} — "
-            f"{c['customer_name'] or '?'} — {c['issue_type']} — {c['date']}  [{label}]"
+            f"{icon} #{c['id']}, {c['batch_ref']}, "
+            f"{c['customer_name'] or '?'}, {c['issue_type']}, {c['date']}  [{label}]"
         )
         with st.expander(title):
-            badge_colors = {"open": "#e74c3c", "in_progress": "#f39c12", "resolved": "#2ecc71"}
+            badge_colors = {"open": "#C0392B", "in_progress": "#D97706", "resolved": "#1B7F4F"}
             badge_col = badge_colors.get(c["status"], "#888")
             st.markdown(
                 f"**Status:** <span style='color:{badge_col};font-weight:bold'>{label}</span>",
@@ -1050,7 +1237,7 @@ def _render_complaints(conn, company_id):
                 st.markdown(f"**Qty affected:** {c['quantity_affected']} kg")
             if c["physical_return"]:
                 ret_qty = c["quantity_returned"] or 0
-                st.markdown(f"**Physical return:** Yes — {ret_qty} kg returned")
+                st.markdown(f"**Physical return:** Yes, {ret_qty} kg returned")
             st.markdown(
                 f"**Initial action:** {c['initial_action']}  ·  "
                 f"**Logged by:** {c['logged_by']}  ·  *{c['date']}*"
@@ -1065,6 +1252,6 @@ def _render_complaints(conn, company_id):
                 st.markdown("**Update Timeline:**")
                 for u in updates:
                     st.markdown(
-                        f"**{u['date']}** — {u['update_description']}  "
+                        f"**{u['date']}**: {u['update_description']}  "
                         f"*(Action: {u['action_taken']}, Status → {u['status']}, by {u['logged_by']})*"
                     )

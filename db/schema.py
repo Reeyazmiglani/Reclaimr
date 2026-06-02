@@ -254,6 +254,7 @@ def migrate_db(conn: sqlite3.Connection) -> None:
         "ALTER TABLE production_logs ADD COLUMN overhead_cost REAL",
         "ALTER TABLE production_logs ADD COLUMN total_batch_cost REAL",
         "ALTER TABLE production_logs ADD COLUMN cost_per_kg REAL",
+        "ALTER TABLE receivables ADD COLUMN last_contacted TEXT",
     ]:
         try:
             conn.execute(sql)

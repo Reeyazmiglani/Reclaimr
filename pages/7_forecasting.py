@@ -27,12 +27,60 @@ _BASE_MAT_MONTHLY   = 10_601_525 / 12
 _BASE_ELASTO_COGS_M = 11_028_707 / 12
 
 _PLOT   = dict(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-               font_color="#ccc", margin=dict(t=45, b=30, l=10, r=10))
-_GREEN  = "#2ecc71"
-_YELLOW = "#f39c12"
-_RED    = "#e74c3c"
-_BLUE   = "#3498db"
-_PURPLE = "#9b59b6"
+               font_color="#2C2218", margin=dict(t=45, b=30, l=10, r=10))
+_GREEN  = "#1B7F4F"
+_YELLOW = "#D97706"
+_RED    = "#C0392B"
+_BLUE   = "#C17F3E"
+_PURPLE = "#8B6A45"
+
+_WARM_CSS = (
+    "<style>"
+    "@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600&display=swap');"
+    "* { font-family: 'DM Sans', sans-serif !important; }"
+    "[class*='material-symbols'] { font-family: 'Material Symbols Rounded' !important; }"
+    "[data-testid='metric-container']{background:#FFF8F0;border:1px solid #E8D5B7;"
+    "border-radius:10px;padding:14px 18px}"
+    "[data-testid='stMetricValue']{color:#2C2218}"
+    "[data-testid='stMetricLabel']{color:#8B6A45}"
+    "hr{border-color:#E8D5B7!important}"
+    "h1{border-bottom:3px solid #C17F3E;padding-bottom:6px;display:inline-block}"
+    "h2,h3{color:#2C2218}"
+    "[data-testid='stDataFrame'] th{background:#FFF8F0!important;color:#2C2218!important;"
+    "border:1px solid #E8D5B7!important}"
+    "[data-testid='stDataFrame'] td{border-color:#E8D5B7!important}"
+    "div[data-baseweb='tab-highlight']{background:#C17F3E!important}"
+    "button[data-baseweb='tab'][aria-selected='true']{color:#C17F3E!important}"
+    "div[data-baseweb='input']{border:1px solid #C5A882!important;border-radius:6px!important}div[data-baseweb='textarea']{border:1px solid #C5A882!important;border-radius:6px!important}div[data-baseweb='select'] > div:first-child{border:1px solid #C5A882!important;border-radius:6px!important}"
+    "</style>"
+)
+_DARK_CSS = (
+    "<style>"
+    "@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600&display=swap');"
+    "* { font-family: 'DM Sans', sans-serif !important; }"
+    "[class*='material-symbols'] { font-family: 'Material Symbols Rounded' !important; }"
+    "[data-testid='stAppViewContainer']{background:#1A1410!important}"
+    "[data-testid='stHeader']{background:#1A1410!important}"
+    "[data-testid='metric-container']{background:#2C2218!important;border:1px solid #4A3728!important;"
+    "border-radius:10px;padding:14px 18px}"
+    "[data-testid='stMetricValue']{color:#F5E6D3!important}"
+    "[data-testid='stMetricLabel']{color:#C4A882!important}"
+    "[data-testid='stSidebar']{background:#1E160E!important}"
+    "hr{border-color:#4A3728!important}"
+    "h1{border-bottom:3px solid #C17F3E;padding-bottom:6px;display:inline-block;color:#F5E6D3!important}"
+    "h2,h3{color:#F5E6D3!important}"
+    "[data-testid='stDataFrame'] th{background:#2C2218!important;color:#F5E6D3!important;"
+    "border:1px solid #4A3728!important}"
+    "[data-testid='stDataFrame'] td{border-color:#4A3728!important}"
+    "div[data-baseweb='input']{border:1px solid #4A3728!important;border-radius:6px!important;background:#231C14!important}"
+    "div[data-baseweb='input'] input{background:#231C14!important;color:#F5E6D3!important}"
+    "div[data-baseweb='textarea']{border:1px solid #4A3728!important;border-radius:6px!important;background:#231C14!important}"
+    "div[data-baseweb='textarea'] textarea{background:#231C14!important;color:#F5E6D3!important}"
+    "div[data-baseweb='select'] > div:first-child{border:1px solid #4A3728!important;border-radius:6px!important;background:#231C14!important}"
+    "[data-testid='stForm']{background:#2C2218!important;border-color:#4A3728!important}"
+    "[data-testid='stExpander'] details{background:#2C2218!important;border-color:#4A3728!important}"
+    "</style>"
+)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -62,10 +110,11 @@ def _delta_badge(new: float, old: float, prefix: str = "₹") -> str:
 
 def _kpi(col, label: str, value: str, delta_html: str = "", border_color: str = _BLUE) -> None:
     col.markdown(
-        f"<div style='background:#1a1a1a;border-radius:8px;padding:14px 16px;"
-        f"border-top:3px solid {border_color};margin-bottom:6px;min-height:90px'>"
-        f"<p style='color:#888;font-size:11px;text-transform:uppercase;margin:0'>{label}</p>"
-        f"<p style='color:#fff;font-size:18px;font-weight:700;margin:4px 0'>{value}</p>"
+        f"<div style='background:#FFF8F0;border-radius:8px;padding:14px 16px;"
+        f"border-top:3px solid {border_color};margin-bottom:6px;min-height:90px;"
+        f"border:1px solid #E8D5B7'>"
+        f"<p style='color:#8B6A45;font-size:11px;text-transform:uppercase;margin:0'>{label}</p>"
+        f"<p style='color:#2C2218;font-size:18px;font-weight:700;margin:4px 0'>{value}</p>"
         f"<div style='min-height:18px'>{delta_html}</div></div>",
         unsafe_allow_html=True,
     )
@@ -232,7 +281,7 @@ def _tab_targets(conn, actuals: dict, view: str, kp: str) -> None:
         "SELECT * FROM forecast_targets ORDER BY id DESC LIMIT 1"
     ).fetchone()
     if not saved:
-        st.info("No targets saved yet — set and save your targets above.")
+        st.info("No targets saved yet, set and save your targets above.")
         return
 
     st.divider()
@@ -249,10 +298,10 @@ def _tab_targets(conn, actuals: dict, view: str, kp: str) -> None:
         st.markdown(
             f"<div style='margin-bottom:14px'>"
             f"<div style='display:flex;justify-content:space-between;margin-bottom:4px'>"
-            f"<span style='color:#ccc'>{em} {label}</span>"
+            f"<span style='color:#2C2218'>{em} {label}</span>"
             f"<span style='color:{clr}'><b>{a_s}</b> &nbsp;/&nbsp; {t_s} &nbsp;·&nbsp; {pct:.0f}%</span>"
             f"</div>"
-            f"<div style='background:#2a2a2a;border-radius:4px;height:9px'>"
+            f"<div style='background:#E8D5B7;border-radius:4px;height:9px'>"
             f"<div style='background:{clr};border-radius:4px;height:9px;width:{pct:.1f}%'></div>"
             f"</div></div>",
             unsafe_allow_html=True,
@@ -320,14 +369,14 @@ def _pricing_rwox(actuals: dict, kp: str) -> None:
         with be_col:
             be_clr = _GREEN if new_vol >= breakeven_vol else _RED
             st.markdown(
-                f"<div style='background:#1a1a1a;border-radius:8px;padding:12px 16px;"
-                f"border-left:4px solid {be_clr};margin-top:8px'>"
-                f"<span style='color:#888'>Break-even at {_inr(new_price)}/kg:</span> "
+                f"<div style='background:#FFF8F0;border-radius:8px;padding:12px 16px;"
+                f"border-left:4px solid {be_clr};margin-top:8px;border:1px solid #E8D5B7'>"
+                f"<span style='color:#8B6A45'>Break-even at {_inr(new_price)}/kg:</span> "
                 f"<b style='color:{be_clr}'>{breakeven_vol:,.0f} kg/month</b>"
                 f"{'&nbsp; ✅ above volume' if new_vol >= breakeven_vol else '&nbsp; 🔴 below break-even'}"
                 f"</div>", unsafe_allow_html=True)
     else:
-        st.error("New price is below material cost — every unit sold loses money.")
+        st.error("New price is below material cost, every unit sold loses money.")
 
     pct_range = list(range(-20, 31, 5))
     rev_line  = [cur_price * (1 + p/100) * new_vol for p in pct_range]
@@ -343,8 +392,8 @@ def _pricing_rwox(actuals: dict, kp: str) -> None:
     fig.add_vline(x=price_chg, line=dict(color=_YELLOW, dash="dash", width=1))
     fig.add_hline(y=0, line=dict(color=_RED, dash="dot", width=1))
     fig.update_layout(title="Revenue & Profit Sensitivity to Price Change",
-        height=300, xaxis=dict(title="Price change (%)", gridcolor="#333"),
-        yaxis=dict(gridcolor="#333", tickprefix="₹"),
+        height=300, xaxis=dict(title="Price change (%)", gridcolor="#E8D5B7"),
+        yaxis=dict(gridcolor="#E8D5B7", tickprefix="₹"),
         legend=dict(orientation="h", y=-0.3), **_PLOT)
     st.plotly_chart(fig, use_container_width=True, key=f"{kp}_price_chart")
 
@@ -387,9 +436,9 @@ def _pricing_elasto(actuals: dict, kp: str) -> None:
         with be_col:
             be_clr = _GREEN if new_rev >= breakeven_rev else _RED
             st.markdown(
-                f"<div style='background:#1a1a1a;border-radius:8px;padding:12px 16px;"
-                f"border-left:4px solid {be_clr};margin-top:8px'>"
-                f"<span style='color:#888'>Break-even at {cur_gm}% margin:</span> "
+                f"<div style='background:#FFF8F0;border-radius:8px;padding:12px 16px;"
+                f"border-left:4px solid {be_clr};margin-top:8px;border:1px solid #E8D5B7'>"
+                f"<span style='color:#8B6A45'>Break-even at {cur_gm}% margin:</span> "
                 f"<b style='color:{be_clr}'>{_inr(breakeven_rev)}/month</b>"
                 f"{'&nbsp; ✅ above revenue' if new_rev >= breakeven_rev else '&nbsp; 🔴 below break-even'}"
                 f"</div>", unsafe_allow_html=True)
@@ -403,8 +452,8 @@ def _pricing_elasto(actuals: dict, kp: str) -> None:
     fig.add_vline(x=cur_gm, line=dict(color=_YELLOW, dash="dash", width=1))
     fig.add_hline(y=0, line=dict(color=_RED, dash="dot", width=1))
     fig.update_layout(title="Net Profit Sensitivity to Gross Margin",
-        height=300, xaxis=dict(title="Gross margin (%)", gridcolor="#333"),
-        yaxis=dict(gridcolor="#333", tickprefix="₹"),
+        height=300, xaxis=dict(title="Gross margin (%)", gridcolor="#E8D5B7"),
+        yaxis=dict(gridcolor="#E8D5B7", tickprefix="₹"),
         legend=dict(orientation="h", y=-0.3), **_PLOT)
     st.plotly_chart(fig, use_container_width=True, key=f"{kp}_price_chart")
 
@@ -479,18 +528,18 @@ def _materials_rwox(actuals: dict, kp: str) -> None:
         clr    = _GREEN if diff <= 0 else _RED
         arrow  = "▲" if diff > 0 else ("▼" if diff < 0 else "—")
         rows_html += (
-            f"<tr><td style='padding:6px 12px;color:#ccc'>{name}</td>"
-            f"<td style='padding:6px 12px;color:#888'>{_inr(base_c)}</td>"
+            f"<tr><td style='padding:6px 12px;color:#2C2218'>{name}</td>"
+            f"<td style='padding:6px 12px;color:#8B6A45'>{_inr(base_c)}</td>"
             f"<td style='padding:6px 12px;color:{clr}'><b>{_inr(new_c)}</b></td>"
             f"<td style='padding:6px 12px;color:{clr}'>{arrow} {_inr(abs(diff))} ({changes[name]:+d}%)</td>"
             f"</tr>")
     st.markdown(
-        "<table style='width:100%;border-collapse:collapse;font-size:14px'>"
-        "<thead><tr style='background:#222'>"
-        "<th style='padding:8px 12px;text-align:left;color:#888'>Material</th>"
-        "<th style='padding:8px 12px;text-align:left;color:#888'>Current / month</th>"
-        "<th style='padding:8px 12px;text-align:left;color:#888'>New / month</th>"
-        "<th style='padding:8px 12px;text-align:left;color:#888'>Change</th>"
+        "<table style='width:100%;border-collapse:collapse;font-size:14px;border:1px solid #E8D5B7'>"
+        "<thead><tr style='background:#FFF0DC'>"
+        "<th style='padding:8px 12px;text-align:left;color:#8B6A45'>Material</th>"
+        "<th style='padding:8px 12px;text-align:left;color:#8B6A45'>Current / month</th>"
+        "<th style='padding:8px 12px;text-align:left;color:#8B6A45'>New / month</th>"
+        "<th style='padding:8px 12px;text-align:left;color:#8B6A45'>Change</th>"
         f"</tr></thead><tbody>{rows_html}</tbody></table>",
         unsafe_allow_html=True)
 
@@ -500,8 +549,8 @@ def _materials_rwox(actuals: dict, kp: str) -> None:
     fig = go.Figure(go.Bar(x=impacts, y=mat_names, orientation="h", marker_color=colors,
         hovertemplate="<b>%{y}</b><br>₹%{x:,.0f}/month<extra></extra>"))
     fig.update_layout(title="Monthly Cost Impact by Material",
-        height=240, xaxis=dict(gridcolor="#333", tickprefix="₹"),
-        yaxis=dict(gridcolor="#333"), **_PLOT)
+        height=240, xaxis=dict(gridcolor="#E8D5B7", tickprefix="₹"),
+        yaxis=dict(gridcolor="#E8D5B7"), **_PLOT)
     st.plotly_chart(fig, use_container_width=True, key=f"{kp}_mat_chart")
 
 
@@ -539,8 +588,8 @@ def _materials_elasto(actuals: dict, kp: str) -> None:
     fig.add_vline(x=cogs_chg, line=dict(color=_YELLOW, dash="dash", width=1))
     fig.add_hline(y=0, line=dict(color=_RED, dash="dot", width=1))
     fig.update_layout(title="Net Profit vs Stock Cost Change",
-        height=280, xaxis=dict(title="Stock cost change (%)", gridcolor="#333"),
-        yaxis=dict(gridcolor="#333", tickprefix="₹"), **_PLOT)
+        height=280, xaxis=dict(title="Stock cost change (%)", gridcolor="#E8D5B7"),
+        yaxis=dict(gridcolor="#E8D5B7", tickprefix="₹"), **_PLOT)
     st.plotly_chart(fig, use_container_width=True, key=f"{kp}_mat_chart")
 
 
@@ -548,7 +597,7 @@ def _tab_materials(actuals: dict, view: str, kp: str) -> None:
     if view == "rwox":
         st.subheader("What If Raw Material Costs Change?")
         st.caption("Adjust each input cost and see the impact on margin and break-even price.")
-        st.markdown("**Cost change sliders** — drag left for cheaper, right for more expensive")
+        st.markdown("**Cost change sliders**: drag left for cheaper, right for more expensive")
         _materials_rwox(actuals, kp)
     elif view == "elasto":
         st.subheader("What If Stock Costs Change?")
@@ -558,7 +607,7 @@ def _tab_materials(actuals: dict, view: str, kp: str) -> None:
     else:
         st.subheader("Cost Sensitivity")
         st.caption("Adjust costs for both companies and see the impact.")
-        mt = st.tabs(["🏭 Rwox — Raw Materials", "🏪 Elastohorse — Stock Cost"])
+        mt = st.tabs(["🏭 Rwox: Raw Materials", "🏪 Elastohorse: Stock Cost"])
         with mt[0]:
             st.markdown("**Drag left for cheaper, right for more expensive**")
             _materials_rwox(actuals, f"{kp}r")
@@ -590,11 +639,12 @@ def _order_check_rwox(conn, actuals: dict, kp: str) -> None:
             value=date.today() + timedelta(days=30), key=f"{kp}_oc_date",
             min_value=date.today())
         st.markdown(
-            f"<div style='background:#1a1a1a;border-radius:8px;padding:12px;margin-top:8px'>"
-            f"<p style='color:#888;font-size:12px;margin:0'>Current capacity</p>"
-            f"<p style='color:#fff;margin:4px 0'>{monthly_cap:,.0f} kg/month · {daily_cap:.0f} kg/day</p>"
-            f"<p style='color:#888;font-size:12px;margin:0'>Already committed</p>"
-            f"<p style='color:#fff;margin:4px 0'>{committed:,.0f} kg &rarr; "
+            f"<div style='background:#FFF8F0;border-radius:8px;padding:12px;margin-top:8px;"
+            f"border:1px solid #E8D5B7'>"
+            f"<p style='color:#8B6A45;font-size:12px;margin:0'>Current capacity</p>"
+            f"<p style='color:#2C2218;margin:4px 0'>{monthly_cap:,.0f} kg/month · {daily_cap:.0f} kg/day</p>"
+            f"<p style='color:#8B6A45;font-size:12px;margin:0'>Already committed</p>"
+            f"<p style='color:#2C2218;margin:4px 0'>{committed:,.0f} kg &rarr; "
             f"<b style='color:{_GREEN if available > 0 else _RED}'>{available:,.0f} kg available</b></p>"
             f"</div>", unsafe_allow_html=True)
 
@@ -615,7 +665,7 @@ def _order_check_rwox(conn, actuals: dict, kp: str) -> None:
 
     if sell_price <= base_cpk:
         verdict, v_clr, icon = "Do Not Take", _RED, "🔴"
-        reason = f"Price ₹{sell_price:.2f}/kg is below material cost of ₹{base_cpk:.2f}/kg — every kg sold loses money."
+        reason = f"Price ₹{sell_price:.2f}/kg is below material cost of ₹{base_cpk:.2f}/kg, every kg sold loses money."
         action = "Increase the price or decline."
     elif can_do_normal:
         verdict, v_clr, icon = "Take It", _GREEN, "✅"
@@ -623,7 +673,7 @@ def _order_check_rwox(conn, actuals: dict, kp: str) -> None:
                   f"Production takes ~{prod_days_needed:.0f} working days.")
         action = "Confirm the order and log it in the system."
     elif can_do_with_shifts:
-        verdict, v_clr, icon = "Can Do — With Extra Shifts", _YELLOW, "⚠️"
+        verdict, v_clr, icon = "Can Do, With Extra Shifts", _YELLOW, "⚠️"
         reason = (f"Normal capacity falls short by {order_qty - available:,.0f} kg. "
                   f"With 50% overtime you could produce {extra_possible:,.0f} kg in time.")
         action = "Confirm only if you can arrange extra shifts. Factor in overtime wages."
@@ -633,15 +683,15 @@ def _order_check_rwox(conn, actuals: dict, kp: str) -> None:
                   f"but you have {days_available} days.")
         action = f"Ask for {int(prod_days_needed * 1.1) + 5} calendar days."
     else:
-        verdict, v_clr, icon = "Capacity Constraint — Negotiate", _YELLOW, "⚠️"
+        verdict, v_clr, icon = "Capacity Constraint, Negotiate", _YELLOW, "⚠️"
         reason = (f"Available capacity ({available:,.0f} kg) is less than the order ({order_qty:,.0f} kg).")
         action = "Consider a partial order or push the delivery date."
 
     st.markdown(
-        f"<div style='background:#1a1a1a;border-radius:10px;padding:20px 24px;"
-        f"border-left:5px solid {v_clr};margin-bottom:16px'>"
+        f"<div style='background:#FFF8F0;border-radius:10px;padding:20px 24px;"
+        f"border-left:5px solid {v_clr};margin-bottom:16px;border:1px solid #E8D5B7'>"
         f"<h3 style='color:{v_clr};margin:0 0 8px 0'>{icon} {verdict}</h3>"
-        f"<p style='color:#ccc;margin:0 0 8px 0'>{reason}</p>"
+        f"<p style='color:#2C2218;margin:0 0 8px 0'>{reason}</p>"
         f"<p style='color:{_YELLOW};margin:0'><b>Next step:</b> {action}</p>"
         f"</div>", unsafe_allow_html=True)
 
@@ -670,9 +720,10 @@ def _order_check_elasto(actuals: dict, kp: str) -> None:
             value=date.today() + timedelta(days=30), key=f"{kp}_oc_date",
             min_value=date.today())
         st.markdown(
-            f"<div style='background:#1a1a1a;border-radius:8px;padding:12px;margin-top:8px'>"
-            f"<p style='color:#888;font-size:12px;margin:0'>Cash available now</p>"
-            f"<p style='color:#fff;font-size:18px;font-weight:700;margin:4px 0'>{_inr(elasto_cash)}</p>"
+            f"<div style='background:#FFF8F0;border-radius:8px;padding:12px;margin-top:8px;"
+            f"border:1px solid #E8D5B7'>"
+            f"<p style='color:#8B6A45;font-size:12px;margin:0'>Cash available now</p>"
+            f"<p style='color:#2C2218;font-size:18px;font-weight:700;margin:4px 0'>{_inr(elasto_cash)}</p>"
             f"</div>", unsafe_allow_html=True)
 
     gross_profit   = order_val - buy_cost
@@ -692,11 +743,11 @@ def _order_check_elasto(actuals: dict, kp: str) -> None:
         action    = "Arrange supplier credit or a short-term loan before accepting."
     elif gross_profit <= 0:
         verdict, v_clr, icon = "Do Not Take", _RED, "🔴"
-        reason    = f"Stock cost {_inr(buy_cost)} exceeds sale value {_inr(order_val)} — this order loses money."
+        reason    = f"Stock cost {_inr(buy_cost)} exceeds sale value {_inr(order_val)}, this order loses money."
         action    = "Renegotiate the purchase price or sell at a higher rate."
     elif gm_pct < 10:
-        verdict, v_clr, icon = "Low Margin — Proceed with Caution", _YELLOW, "⚠️"
-        reason    = (f"Gross margin is only {gm_pct:.1f}% — well below the FY25 average of ~26%. "
+        verdict, v_clr, icon = "Low Margin, Proceed with Caution", _YELLOW, "⚠️"
+        reason    = (f"Gross margin is only {gm_pct:.1f}%, well below the FY25 average of ~26%. "
                      f"After buying stock, {_inr(cash_after_buy)} remains.")
         action    = "Only if cash flow is comfortable and payment risk is low."
     else:
@@ -706,10 +757,10 @@ def _order_check_elasto(actuals: dict, kp: str) -> None:
         action    = "Confirm the order. Track the receivable."
 
     st.markdown(
-        f"<div style='background:#1a1a1a;border-radius:10px;padding:20px 24px;"
-        f"border-left:5px solid {v_clr};margin-bottom:16px'>"
+        f"<div style='background:#FFF8F0;border-radius:10px;padding:20px 24px;"
+        f"border-left:5px solid {v_clr};margin-bottom:16px;border:1px solid #E8D5B7'>"
         f"<h3 style='color:{v_clr};margin:0 0 8px 0'>{icon} {verdict}</h3>"
-        f"<p style='color:#ccc;margin:0 0 8px 0'>{reason}</p>"
+        f"<p style='color:#2C2218;margin:0 0 8px 0'>{reason}</p>"
         f"<p style='color:{_YELLOW};margin:0'><b>Next step:</b> {action}</p>"
         f"</div>", unsafe_allow_html=True)
 
@@ -759,36 +810,36 @@ def _cash_chart(cash_start, m1_net, recurring_net, color, title):
         x=[f"Wk {w}" for w in weeks], y=cash_by_week,
         mode="lines+markers", line=dict(color=color, width=2.5),
         marker=dict(size=8, color=pt_colors, line=dict(color="#fff", width=1.5)),
-        fill="tozeroy", fillcolor=f"rgba(52,152,219,0.08)",
+        fill="tozeroy", fillcolor=f"rgba(193,127,62,0.08)",
         hovertemplate="<b>%{x}</b><br>₹%{y:,.0f}<extra></extra>"))
     if min(cash_by_week) < 0:
         fig.add_hline(y=0, line=dict(color=_RED, dash="dash", width=1.5),
                       annotation_text="Zero", annotation_font_color=_RED)
     fig.update_layout(title=title, height=300,
-        xaxis=dict(gridcolor="#333"),
-        yaxis=dict(gridcolor="#333", tickprefix="₹"), **_PLOT)
+        xaxis=dict(gridcolor="#E8D5B7"),
+        yaxis=dict(gridcolor="#E8D5B7", tickprefix="₹"), **_PLOT)
     return fig, cash_by_week
 
 
 def _tab_cash(actuals: dict, view: str, kp: str) -> None:
-    st.subheader("Cash Forecast — 30 / 60 / 90 Days")
-    st.caption("Project your cash position forward. Pre-filled from actual data — adjust to model different scenarios.")
+    st.subheader("Cash Forecast: 30 / 60 / 90 Days")
+    st.caption("Project your cash position forward. Pre-filled from actual data, adjust to model different scenarios.")
 
     if view == "both":
         ca, cb = st.columns(2)
         with ca:
-            rwox_cash = st.number_input("Rwox — cash in bank now (₹)",
+            rwox_cash = st.number_input("Rwox: cash in bank now (₹)",
                 min_value=0.0, value=float(actuals["rwox_cash"]),
                 step=10_000.0, format="%.0f", key=f"{kp}_cf_rc")
         with cb:
-            elasto_cash = st.number_input("Elastohorse — cash in bank now (₹)",
+            elasto_cash = st.number_input("Elastohorse: cash in bank now (₹)",
                 min_value=0.0, value=float(actuals["elasto_cash"]),
                 step=10_000.0, format="%.0f", key=f"{kp}_cf_ec")
         cash_now  = rwox_cash + elasto_cash
         fixed_base = _RWOX_FIXED_M + _ELASTO_FIXED_M
         cogs_base  = actuals["proc_last_30d"] or _BASE_MAT_MONTHLY
         pend_base  = actuals["rwox_pending"] + actuals["elasto_pending"]
-        chart_title = "Cash Runway — Combined (Both Companies)"
+        chart_title = "Cash Runway: Combined (Both Companies)"
         chart_color = _BLUE
     else:
         is_rwox    = (view == "rwox")
@@ -797,9 +848,9 @@ def _tab_cash(actuals: dict, view: str, kp: str) -> None:
         cogs_base  = _BASE_MAT_MONTHLY if is_rwox else _BASE_ELASTO_COGS_M
         pend_base  = actuals["rwox_pending"] if is_rwox else actuals["elasto_pending"]
         name       = "Rwox" if is_rwox else "Elastohorse"
-        chart_title = f"Cash Runway — {name}"
+        chart_title = f"Cash Runway: {name}"
         chart_color = _BLUE if is_rwox else _PURPLE
-        cash_now = st.number_input(f"{name} — cash in bank now (₹)",
+        cash_now = st.number_input(f"{name}: cash in bank now (₹)",
             min_value=0.0, value=float(cash_now),
             step=10_000.0, format="%.0f", key=f"{kp}_cf_cash")
 
@@ -818,7 +869,7 @@ def _tab_cash(actuals: dict, view: str, kp: str) -> None:
             value=float(round(cogs_base, -3)), step=25_000.0, format="%.0f",
             key=f"{kp}_cf_cogs")
 
-    st.markdown("**One-off payments this month** — one per line: Name, Amount")
+    st.markdown("**One-off payments this month**: one per line: Name, Amount")
     oneoff_text = st.text_area("E.g.  Loan repayment, 200000",
         height=75, key=f"{kp}_cf_oo", label_visibility="collapsed")
     oneoff_total = 0.0
@@ -841,11 +892,11 @@ def _tab_cash(actuals: dict, view: str, kp: str) -> None:
         clr      = _GREEN if val > 0 else _RED
         warn_vis = "visible" if val < 0 else "hidden"
         col.markdown(
-            f"<div style='background:#1a1a1a;border-radius:8px;padding:14px;text-align:center;"
-            f"border-top:3px solid {clr};min-height:100px'>"
-            f"<p style='color:#888;font-size:11px;margin:0'>{label}</p>"
+            f"<div style='background:#FFF8F0;border-radius:8px;padding:14px;text-align:center;"
+            f"border-top:3px solid {clr};min-height:100px;border:1px solid #E8D5B7'>"
+            f"<p style='color:#8B6A45;font-size:11px;margin:0'>{label}</p>"
             f"<p style='color:{clr};font-size:19px;font-weight:700;margin:4px 0'>{_inr(val)}</p>"
-            f"<span style='color:#e74c3c;font-size:11px;visibility:{warn_vis}'>⚠️ Negative cash</span>"
+            f"<span style='color:{_RED};font-size:11px;visibility:{warn_vis}'>⚠️ Negative cash</span>"
             f"</div>", unsafe_allow_html=True)
 
     fig, cash_by_week = _cash_chart(cash_now, m1_net, recurring_net, chart_color, chart_title)
@@ -874,20 +925,20 @@ def _tab_growth(actuals: dict, view: str, kp: str) -> None:
         base_m      = actuals["rwox_rev_m"]  or (15_451_424 / 12)
         net_margin  = _RWOX_NET_MARGIN
         annual_rev  = 15_451_424
-        title       = "Projected Annual Results — Rwox"
+        title       = "Projected Annual Results: Rwox"
         color_main  = _BLUE
         base_prod   = actuals["avg_prod_kg"] or _FALLBACK_PROD_KG
 
         def _extra(growth_pct):
             extra_kg = max(base_prod * (1 + growth_pct/100) - base_prod, 0)
-            return (f"<p style='color:#888;font-size:12px;margin:0'>EXTRA PRODUCTION NEEDED</p>"
-                    f"<p style='color:#ccc;font-size:14px;margin:2px 0 10px'>{extra_kg:,.0f} kg/month</p>")
+            return (f"<p style='color:#8B6A45;font-size:12px;margin:0'>EXTRA PRODUCTION NEEDED</p>"
+                    f"<p style='color:#2C2218;font-size:14px;margin:2px 0 10px'>{extra_kg:,.0f} kg/month</p>")
 
     elif view == "elasto":
         base_m      = actuals["elasto_rev_m"] or (14_972_732 / 12)
         net_margin  = _ELASTO_NET_MARGIN
         annual_rev  = 14_972_732
-        title       = "Projected Annual Results — Elastohorse"
+        title       = "Projected Annual Results: Elastohorse"
         color_main  = _PURPLE
 
         def _extra(growth_pct):
@@ -900,19 +951,19 @@ def _tab_growth(actuals: dict, view: str, kp: str) -> None:
                        (actuals["elasto_rev_m"] or 14_972_732/12))
         net_margin  = (346_111 + 855_058) / (15_451_424 + 14_972_732)
         annual_rev  = 15_451_424 + 14_972_732
-        title       = "Projected Annual Results — Both Companies"
+        title       = "Projected Annual Results: Both Companies"
         color_main  = _GREEN
         base_prod   = actuals["avg_prod_kg"] or _FALLBACK_PROD_KG
 
         def _extra(growth_pct):
             extra_kg = max(base_prod * (1 + growth_pct/100) - base_prod, 0)
-            return (f"<p style='color:#888;font-size:12px;margin:0'>EXTRA RWOX PRODUCTION</p>"
-                    f"<p style='color:#ccc;font-size:14px;margin:2px 0 10px'>{extra_kg:,.0f} kg/month</p>")
+            return (f"<p style='color:#8B6A45;font-size:12px;margin:0'>EXTRA RWOX PRODUCTION</p>"
+                    f"<p style='color:#2C2218;font-size:14px;margin:2px 0 10px'>{extra_kg:,.0f} kg/month</p>")
 
     wc_ratio = max((1_925_310 + 201_190 + 478_342 + 670_249) /
                    ((15_451_424 + 14_972_732) / 12) / 12, 0.5)
 
-    scenarios = [("Conservative", 5, "#5d6d7e"),
+    scenarios = [("Conservative", 5, "#8B6A45"),
                  ("Base Case",   15, color_main),
                  ("Optimistic",  30, _GREEN)]
 
@@ -925,19 +976,19 @@ def _tab_growth(actuals: dict, view: str, kp: str) -> None:
         extra_wc = max(proj_m - base_m, 0) * wc_ratio
 
         col.markdown(
-            f"<div style='background:#1a1a1a;border-radius:10px;padding:20px;"
-            f"border-top:4px solid {clr};height:100%'>"
+            f"<div style='background:#FFF8F0;border-radius:10px;padding:20px;"
+            f"border-top:4px solid {clr};height:100%;border:1px solid #E8D5B7'>"
             f"<h3 style='color:{clr};margin:0 0 4px 0'>{name}</h3>"
-            f"<p style='color:#888;font-size:13px;margin:0 0 16px 0'>+{growth_pct}% growth</p>"
-            f"<hr style='border-color:#333;margin:0 0 12px 0'>"
-            f"<p style='color:#888;font-size:12px;margin:0'>MONTHLY REVENUE</p>"
-            f"<p style='color:#fff;font-size:20px;font-weight:700;margin:2px 0 10px'>{_inr(proj_m)}</p>"
-            f"<p style='color:#888;font-size:12px;margin:0'>ANNUAL REVENUE</p>"
-            f"<p style='color:#fff;font-size:16px;font-weight:600;margin:2px 0 10px'>{_inr(proj_ann)}</p>"
-            f"<p style='color:#888;font-size:12px;margin:0'>EST. MONTHLY PROFIT</p>"
+            f"<p style='color:#8B6A45;font-size:13px;margin:0 0 16px 0'>+{growth_pct}% growth</p>"
+            f"<hr style='border-color:#E8D5B7;margin:0 0 12px 0'>"
+            f"<p style='color:#8B6A45;font-size:12px;margin:0'>MONTHLY REVENUE</p>"
+            f"<p style='color:#2C2218;font-size:20px;font-weight:700;margin:2px 0 10px'>{_inr(proj_m)}</p>"
+            f"<p style='color:#8B6A45;font-size:12px;margin:0'>ANNUAL REVENUE</p>"
+            f"<p style='color:#2C2218;font-size:16px;font-weight:600;margin:2px 0 10px'>{_inr(proj_ann)}</p>"
+            f"<p style='color:#8B6A45;font-size:12px;margin:0'>EST. MONTHLY PROFIT</p>"
             f"<p style='color:{_color(proj_np)};font-size:16px;font-weight:600;margin:2px 0 10px'>{_inr(proj_np)}</p>"
             f"{_extra(growth_pct)}"
-            f"<p style='color:#888;font-size:12px;margin:0'>EXTRA WORKING CAPITAL</p>"
+            f"<p style='color:#8B6A45;font-size:12px;margin:0'>EXTRA WORKING CAPITAL</p>"
             f"<p style='color:{_YELLOW if extra_wc > 0 else _GREEN};font-size:14px;font-weight:600;margin:2px 0 0'>{_inr(extra_wc)}</p>"
             f"</div>",
             unsafe_allow_html=True,
@@ -953,14 +1004,14 @@ def _tab_growth(actuals: dict, view: str, kp: str) -> None:
     fig.add_trace(go.Bar(x=names, y=rev_vals, name="Annual Revenue", marker_color=colors,
                          hovertemplate="<b>%{x}</b><br>₹%{y:,.0f}<extra></extra>"))
     fig.add_trace(go.Bar(x=names, y=np_vals, name="Annual Net Profit",
-                         marker_color=["rgba(46,204,113,0.6)"]*3,
+                         marker_color=["rgba(27,127,79,0.6)"]*3,
                          hovertemplate="<b>%{x}</b><br>₹%{y:,.0f}<extra></extra>"))
     fig.update_layout(title=title, height=320, barmode="group",
-        xaxis=dict(gridcolor="#333"), yaxis=dict(gridcolor="#333", tickprefix="₹"),
+        xaxis=dict(gridcolor="#E8D5B7"), yaxis=dict(gridcolor="#E8D5B7", tickprefix="₹"),
         legend=dict(orientation="h", y=-0.3), **_PLOT)
     st.plotly_chart(fig, use_container_width=True, key=f"{kp}_growth_chart")
 
-    note = "No orders this month — scenarios based on FY25 monthly averages." if base_m == 0 else \
+    note = "No orders this month, scenarios based on FY25 monthly averages." if base_m == 0 else \
            f"Scenarios modelled from current-month revenue of {_inr(base_m)}."
     st.caption(note)
 
@@ -986,11 +1037,31 @@ def _render_view(conn, actuals: dict, view: str, kp: str) -> None:
     with inner[5]: _tab_growth(actuals, view, kp)
 
 
+_LOGO_HTML = (
+    "<div style='text-align:center;padding:20px 0 10px 0'>"
+    "<svg width='80' height='80' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'>"
+    "<path d='M 68 18 A 48 48 0 1 0 96 50' fill='none' stroke='#C17F3E' stroke-width='5' stroke-linecap='round'/>"
+    "<polygon points='96,36 82,52 104,54' fill='#C17F3E'/>"
+    "<circle cx='50' cy='50' r='10' fill='#C17F3E'/>"
+    "<circle cx='50' cy='50' r='4.5' fill='transparent'/>"
+    "</svg>"
+    "<div style='font-family:DM Sans,sans-serif;font-size:20px;font-weight:700;color:#C17F3E;margin-top:6px'>Reclaimr</div>"
+    "<div style='font-family:DM Sans,sans-serif;font-size:9px;letter-spacing:2px;color:#8B6A45;margin-top:2px'>MANUFACTURING ERP</div>"
+    "</div>"
+)
+
+
 def render_forecasting_page(conn) -> None:
+    _dark = st.session_state.get("dark_mode", False)
+    st.markdown(_DARK_CSS if _dark else _WARM_CSS, unsafe_allow_html=True)
+    st.sidebar.markdown(_LOGO_HTML, unsafe_allow_html=True)
+    global _PLOT
+    _PLOT = dict(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                 font_color="#F5E6D3" if _dark else "#2C2218", margin=dict(t=45, b=30, l=10, r=10))
     _ensure_tables(conn)
 
     st.header("Scenario Planning")
-    st.caption("Play with numbers and see the impact instantly. Every input is pre-filled from your actual data — just move a slider to start exploring.")
+    st.caption("Play with numbers and see the impact instantly. Every input is pre-filled from your actual data, just move a slider to start exploring.")
 
     actuals = _load_actuals(conn)
 

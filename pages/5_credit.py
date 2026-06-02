@@ -12,6 +12,52 @@ def _get_conn():
 COMPANIES = ["Rwox", "Elastohorse"]
 OVERDUE_DAYS = 45
 
+_WARM_CSS = (
+    "<style>"
+    "@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600&display=swap');"
+    "* { font-family: 'DM Sans', sans-serif !important; }"
+    "[class*='material-symbols'] { font-family: 'Material Symbols Rounded' !important; }"
+    "[data-testid='metric-container']{background:#FFF8F0;border:1px solid #E8D5B7;"
+    "border-radius:10px;padding:14px 18px}"
+    "[data-testid='stMetricValue']{color:#2C2218}"
+    "[data-testid='stMetricLabel']{color:#8B6A45}"
+    "hr{border-color:#E8D5B7!important}"
+    "h1{border-bottom:3px solid #C17F3E;padding-bottom:6px;display:inline-block}"
+    "h2,h3{color:#2C2218}"
+    "[data-testid='stDataFrame'] th{background:#FFF8F0!important;color:#2C2218!important;"
+    "border:1px solid #E8D5B7!important}"
+    "[data-testid='stDataFrame'] td{border-color:#E8D5B7!important}"
+    "div[data-baseweb='input']{border:1px solid #C5A882!important;border-radius:6px!important}div[data-baseweb='textarea']{border:1px solid #C5A882!important;border-radius:6px!important}div[data-baseweb='select'] > div:first-child{border:1px solid #C5A882!important;border-radius:6px!important}"
+    "</style>"
+)
+_DARK_CSS = (
+    "<style>"
+    "@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600&display=swap');"
+    "* { font-family: 'DM Sans', sans-serif !important; }"
+    "[class*='material-symbols'] { font-family: 'Material Symbols Rounded' !important; }"
+    "[data-testid='stAppViewContainer']{background:#1A1410!important}"
+    "[data-testid='stHeader']{background:#1A1410!important}"
+    "[data-testid='metric-container']{background:#2C2218!important;border:1px solid #4A3728!important;"
+    "border-radius:10px;padding:14px 18px}"
+    "[data-testid='stMetricValue']{color:#F5E6D3!important}"
+    "[data-testid='stMetricLabel']{color:#C4A882!important}"
+    "[data-testid='stSidebar']{background:#1E160E!important}"
+    "hr{border-color:#4A3728!important}"
+    "h1{border-bottom:3px solid #C17F3E;padding-bottom:6px;display:inline-block;color:#F5E6D3!important}"
+    "h2,h3{color:#F5E6D3!important}"
+    "[data-testid='stDataFrame'] th{background:#2C2218!important;color:#F5E6D3!important;"
+    "border:1px solid #4A3728!important}"
+    "[data-testid='stDataFrame'] td{border-color:#4A3728!important}"
+    "div[data-baseweb='input']{border:1px solid #4A3728!important;border-radius:6px!important;background:#231C14!important}"
+    "div[data-baseweb='input'] input{background:#231C14!important;color:#F5E6D3!important}"
+    "div[data-baseweb='textarea']{border:1px solid #4A3728!important;border-radius:6px!important;background:#231C14!important}"
+    "div[data-baseweb='textarea'] textarea{background:#231C14!important;color:#F5E6D3!important}"
+    "div[data-baseweb='select'] > div:first-child{border:1px solid #4A3728!important;border-radius:6px!important;background:#231C14!important}"
+    "[data-testid='stForm']{background:#2C2218!important;border-color:#4A3728!important}"
+    "[data-testid='stExpander'] details{background:#2C2218!important;border-color:#4A3728!important}"
+    "</style>"
+)
+
 
 def _ensure_credit_tables(conn):
     # Migrate receivables if it still has the old Financials schema (party_name column)
@@ -37,6 +83,14 @@ def _ensure_credit_tables(conn):
             LEFT JOIN companies c ON r.company_id = c.id;
             DROP TABLE receivables_old;
         """)
+
+    for sql in [
+        "ALTER TABLE receivables ADD COLUMN last_contacted TEXT",
+    ]:
+        try:
+            conn.execute(sql)
+        except Exception:
+            pass
 
     conn.executescript("""
         CREATE TABLE IF NOT EXISTS receivables (
@@ -79,10 +133,10 @@ def _inr(val):
 
 def _days_color(days):
     if days > OVERDUE_DAYS:
-        return "#e74c3c"
+        return "#C0392B"
     if days >= 30:
-        return "#f39c12"
-    return "#2ecc71"
+        return "#D97706"
+    return "#1B7F4F"
 
 
 def _outstanding_receivables(conn):
@@ -115,17 +169,33 @@ def _table_header(cols, hdrs):
     hdr = st.columns(cols)
     for c, h in zip(hdr, hdrs):
         c.markdown(
-            f"<span style='font-size:12px;color:#888;text-transform:uppercase;"
+            f"<span style='font-size:12px;color:#8B6A45;text-transform:uppercase;"
             f"letter-spacing:0.04em'>{h}</span>",
             unsafe_allow_html=True,
         )
     st.markdown(
-        "<div style='border-bottom:1px solid #333;margin:2px 0 6px'></div>",
+        "<div style='border-bottom:2px solid #C17F3E;margin:2px 0 6px'></div>",
         unsafe_allow_html=True,
     )
 
 
+_LOGO_HTML = (
+    "<div style='text-align:center;padding:20px 0 10px 0'>"
+    "<svg width='80' height='80' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'>"
+    "<path d='M 68 18 A 48 48 0 1 0 96 50' fill='none' stroke='#C17F3E' stroke-width='5' stroke-linecap='round'/>"
+    "<polygon points='96,36 82,52 104,54' fill='#C17F3E'/>"
+    "<circle cx='50' cy='50' r='10' fill='#C17F3E'/>"
+    "<circle cx='50' cy='50' r='4.5' fill='transparent'/>"
+    "</svg>"
+    "<div style='font-family:DM Sans,sans-serif;font-size:20px;font-weight:700;color:#C17F3E;margin-top:6px'>Reclaimr</div>"
+    "<div style='font-family:DM Sans,sans-serif;font-size:9px;letter-spacing:2px;color:#8B6A45;margin-top:2px'>MANUFACTURING ERP</div>"
+    "</div>"
+)
+
+
 def render_credit_page(conn):
+    st.markdown(_DARK_CSS if st.session_state.get("dark_mode") else _WARM_CSS, unsafe_allow_html=True)
+    st.sidebar.markdown(_LOGO_HTML, unsafe_allow_html=True)
     _ensure_credit_tables(conn)
 
     st.header("Credit & Payments")
@@ -146,8 +216,8 @@ def render_credit_page(conn):
     overdue_count = len(overdue_recs) + len(overdue_pays)
 
     m1, m2, m3, m4 = st.columns(4)
-    m1.metric("Total Receivables", _inr(total_rec), help="Money owed to us — outstanding balance")
-    m2.metric("Total Payables", _inr(total_pay), help="Money we owe vendors — outstanding balance")
+    m1.metric("Total Receivables", _inr(total_rec), help="Money owed to us, outstanding balance")
+    m2.metric("Total Payables", _inr(total_pay), help="Money we owe vendors, outstanding balance")
     net_label = "surplus" if net >= 0 else "deficit"
     m3.metric(
         "Net Position",
@@ -166,13 +236,13 @@ def render_credit_page(conn):
         names = ", ".join(dict.fromkeys(r["customer_name"] for r in overdue_recs))
         n = len(overdue_recs)
         st.error(
-            f"🔴 **{n} {'customer has' if n == 1 else 'customers have'} not paid in over 45 days** — {names}"
+            f"🔴 **{n} {'customer has' if n == 1 else 'customers have'} not paid in over 45 days**: {names}"
         )
     if overdue_pays:
         names = ", ".join(dict.fromkeys(p["vendor_name"] for p in overdue_pays))
         n = len(overdue_pays)
         st.warning(
-            f"🟡 **{n} vendor {'payment is' if n == 1 else 'payments are'} over 45 days old** — {names}"
+            f"🟡 **{n} vendor {'payment is' if n == 1 else 'payments are'} over 45 days old**: {names}"
         )
     if not overdue_recs and not overdue_pays:
         st.success("✅ Everything within 45-day terms.")
@@ -182,7 +252,7 @@ def render_credit_page(conn):
     # ══════════════════════════════════════════════════════════════════════════
     # SECTION 2 — RECEIVABLES
     # ══════════════════════════════════════════════════════════════════════════
-    st.subheader("Receivables — Money Owed to Us")
+    st.subheader("Receivables: Money Owed to Us")
 
     with st.expander("Log New Receivable", expanded=False):
         with st.form("new_rec_form"):
@@ -196,8 +266,8 @@ def render_credit_page(conn):
             with nr3:
                 nr_amount = st.number_input("Amount (₹) *", min_value=0.01, value=1000.0, step=500.0, format="%.2f")
             with nr4:
-                nr_date = st.date_input("Date of sale", value=today)
-            nr_notes = st.text_area("Notes (optional)", height=70)
+                nr_date = st.date_input("Sale date", value=today)
+            nr_notes = st.text_area("Notes", height=70)
             nr_submit = st.form_submit_button("Add Receivable", type="primary")
 
         if nr_submit:
@@ -228,7 +298,7 @@ def render_credit_page(conn):
             balance_rem = max(rec_row["amount"] - rec_row["total_paid"], 0)
             st.info(
                 f"**Recording payment from: {rec_row['customer_name']}** "
-                f"({rec_row['company']}) — Balance due: {_inr(balance_rem)}"
+                f"({rec_row['company']}), Balance due: {_inr(balance_rem)}"
             )
             with st.form(f"pay_rec_{paying_rec_id}"):
                 pr1, pr2 = st.columns(2)
@@ -239,7 +309,7 @@ def render_credit_page(conn):
                         "Amount received (₹)", min_value=0.01,
                         value=float(balance_rem), step=500.0, format="%.2f",
                     )
-                pr_notes = st.text_input("Notes (optional)")
+                pr_notes = st.text_input("Notes")
                 prs, prc, _ = st.columns([1, 1, 6])
                 with prs:
                     pr_save = st.form_submit_button("Save Payment", type="primary")
@@ -247,22 +317,46 @@ def render_credit_page(conn):
                     pr_cancel = st.form_submit_button("Cancel")
 
             if pr_save:
-                conn.execute(
-                    "INSERT INTO payments (type, reference_id, payment_date, amount_paid, notes) "
-                    "VALUES (?,?,?,?,?)",
-                    ("receivable", paying_rec_id, pr_date.isoformat(),
-                     pr_amount, pr_notes.strip() or None),
-                )
-                new_total = rec_row["total_paid"] + pr_amount
-                new_status = "paid" if new_total >= rec_row["amount"] else "partial"
-                conn.execute("UPDATE receivables SET status=? WHERE id=?", (new_status, paying_rec_id))
-                conn.commit()
-                st.session_state.pop("paying_rec_id", None)
-                st.success("Payment recorded.")
-                st.rerun()
+                if pr_amount <= 0:
+                    st.error("Amount must be greater than zero.")
+                elif pr_amount > balance_rem + 0.01:
+                    st.error(f"Amount {_inr(pr_amount)} exceeds balance {_inr(balance_rem)}, reduce the amount.")
+                else:
+                    conn.execute(
+                        "INSERT INTO payments (type, reference_id, payment_date, amount_paid, notes) "
+                        "VALUES (?,?,?,?,?)",
+                        ("receivable", paying_rec_id, pr_date.isoformat(),
+                         pr_amount, pr_notes.strip() or None),
+                    )
+                    new_total = rec_row["total_paid"] + pr_amount
+                    new_status = "paid" if new_total >= rec_row["amount"] else "partial"
+                    conn.execute("UPDATE receivables SET status=? WHERE id=?", (new_status, paying_rec_id))
+                    conn.commit()
+                    st.session_state.pop("paying_rec_id", None)
+                    st.success("Payment recorded.")
+                    st.rerun()
             if pr_cancel:
                 st.session_state.pop("paying_rec_id", None)
                 st.rerun()
+
+    # Delete confirm flows
+    confirm_del_rec = st.session_state.get("confirm_del_rec_id")
+    if confirm_del_rec:
+        del_r = conn.execute("SELECT customer_name, amount FROM receivables WHERE id=?", (confirm_del_rec,)).fetchone()
+        if del_r:
+            st.warning(f"Delete receivable from **{del_r['customer_name']}** ({_inr(del_r['amount'])})? This also removes any payment records. Cannot be undone.")
+            dc1, dc2, _ = st.columns([1, 1, 8])
+            with dc1:
+                if st.button("Yes, delete", key="conf_del_rec_yes", type="primary"):
+                    conn.execute("DELETE FROM payments WHERE type='receivable' AND reference_id=?", (confirm_del_rec,))
+                    conn.execute("DELETE FROM receivables WHERE id=?", (confirm_del_rec,))
+                    conn.commit()
+                    st.session_state.pop("confirm_del_rec_id", None)
+                    st.rerun()
+            with dc2:
+                if st.button("Cancel", key="conf_del_rec_no"):
+                    st.session_state.pop("confirm_del_rec_id", None)
+                    st.rerun()
 
     # Receivables table
     out_recs = _outstanding_receivables(conn)
@@ -270,8 +364,8 @@ def render_credit_page(conn):
     if not out_recs:
         st.success("No outstanding receivables.")
     else:
-        REC_COLS = [1.6, 0.7, 1.1, 1.0, 0.85, 0.75, 1.15, 0.7]
-        REC_HDRS = ["Customer", "Co.", "Reference", "Amount", "Date", "Days", "Balance", ""]
+        REC_COLS = [1.6, 0.7, 1.1, 1.0, 0.85, 0.75, 1.15, 0.55, 0.45]
+        REC_HDRS = ["Customer", "Co.", "Reference", "Amount", "Date", "Days", "Balance", "", ""]
         _table_header(REC_COLS, REC_HDRS)
 
         total_balance = 0.0
@@ -285,14 +379,14 @@ def render_credit_page(conn):
             r = st.columns(REC_COLS)
             r[0].markdown(f"<div style='{cell}'>{rec['customer_name']}</div>", unsafe_allow_html=True)
             r[1].markdown(f"<div style='{cell}'>{rec['company']}</div>", unsafe_allow_html=True)
-            r[2].markdown(f"<div style='{cell};color:#aaa'>{rec['reference'] or '—'}</div>", unsafe_allow_html=True)
+            r[2].markdown(f"<div style='{cell};color:#8B6A45'>{rec['reference'] or '—'}</div>", unsafe_allow_html=True)
             r[3].markdown(f"<div style='{cell}'>{_inr(rec['amount'])}</div>", unsafe_allow_html=True)
-            r[4].markdown(f"<div style='{cell};color:#aaa'>{rec['date']}</div>", unsafe_allow_html=True)
+            r[4].markdown(f"<div style='{cell};color:#8B6A45'>{rec['date']}</div>", unsafe_allow_html=True)
             r[5].markdown(
                 f"<div style='{cell};color:{dc};font-weight:bold'>{days}d</div>",
                 unsafe_allow_html=True,
             )
-            partial_tag = " <span style='font-size:11px;color:#aaa'>(partial)</span>" if rec["status"] == "partial" else ""
+            partial_tag = " <span style='font-size:11px;color:#8B6A45'>(partial)</span>" if rec["status"] == "partial" else ""
             r[6].markdown(
                 f"<div style='{cell};color:{dc};font-weight:bold'>{_inr(balance)}{partial_tag}</div>",
                 unsafe_allow_html=True,
@@ -301,9 +395,12 @@ def render_credit_page(conn):
                 st.session_state["paying_rec_id"] = rec["id"]
                 st.session_state.pop("paying_pay_id", None)
                 st.rerun()
+            if r[8].button("Del", key=f"del_rec_{rec['id']}", use_container_width=True):
+                st.session_state["confirm_del_rec_id"] = rec["id"]
+                st.rerun()
 
         st.markdown(
-            f"<div style='border-top:1px solid #333;padding-top:8px;font-size:14px'>"
+            f"<div style='border-top:1px solid #E8D5B7;padding-top:8px;font-size:14px'>"
             f"<b>Total Outstanding: {_inr(total_balance)}</b></div>",
             unsafe_allow_html=True,
         )
@@ -316,11 +413,11 @@ def render_credit_page(conn):
     """).fetchall()
 
     if paid_recs:
-        with st.expander(f"Payment History — {len(paid_recs)} paid receivable(s)", expanded=False):
+        with st.expander(f"Payment History: {len(paid_recs)} paid receivable(s)", expanded=False):
             for pr in paid_recs:
                 ref_str = f" · ref: {pr['reference']}" if pr["reference"] else ""
                 st.markdown(
-                    f"✅ **{pr['customer_name']}** ({pr['company']}) — "
+                    f"✅ **{pr['customer_name']}** ({pr['company']}), "
                     f"{_inr(pr['amount'])} · *{pr['date']}*{ref_str}"
                 )
                 pay_rows = conn.execute(
@@ -329,7 +426,7 @@ def render_credit_page(conn):
                     (pr["id"],),
                 ).fetchall()
                 for pay in pay_rows:
-                    note = f" — {pay['notes']}" if pay["notes"] else ""
+                    note = f", {pay['notes']}" if pay["notes"] else ""
                     st.markdown(f"&nbsp;&nbsp;&nbsp;↳ {pay['payment_date']}: {_inr(pay['amount_paid'])}{note}")
 
     st.divider()
@@ -337,7 +434,7 @@ def render_credit_page(conn):
     # ══════════════════════════════════════════════════════════════════════════
     # SECTION 3 — PAYABLES
     # ══════════════════════════════════════════════════════════════════════════
-    st.subheader("Payables — Money We Owe Vendors")
+    st.subheader("Payables: Money We Owe Vendors")
 
     with st.expander("Log New Payable", expanded=False):
         with st.form("new_pay_form"):
@@ -350,8 +447,8 @@ def render_credit_page(conn):
             with np3:
                 np_amount = st.number_input("Amount (₹) *", min_value=0.01, value=1000.0, step=500.0, format="%.2f", key="np_amount")
             with np4:
-                np_date = st.date_input("Date of purchase", value=today, key="np_date")
-            np_notes = st.text_area("Notes (optional)", height=70, key="np_notes")
+                np_date = st.date_input("Purchase date", value=today, key="np_date")
+            np_notes = st.text_area("Notes", height=70, key="np_notes")
             np_submit = st.form_submit_button("Add Payable", type="primary")
 
         if np_submit:
@@ -381,7 +478,7 @@ def render_credit_page(conn):
         if pay_row:
             balance_rem = max(pay_row["amount"] - pay_row["total_paid"], 0)
             st.info(
-                f"**Recording payment to: {pay_row['vendor_name']}** — Balance due: {_inr(balance_rem)}"
+                f"**Recording payment to: {pay_row['vendor_name']}**, Balance due: {_inr(balance_rem)}"
             )
             with st.form(f"pay_pay_{paying_pay_id}"):
                 pp1, pp2 = st.columns(2)
@@ -392,7 +489,7 @@ def render_credit_page(conn):
                         "Amount paid (₹)", min_value=0.01,
                         value=float(balance_rem), step=500.0, format="%.2f", key="pp_amount",
                     )
-                pp_notes = st.text_input("Notes (optional)", key="pp_notes_field")
+                pp_notes = st.text_input("Notes", key="pp_notes_field")
                 pps, ppc, _ = st.columns([1, 1, 6])
                 with pps:
                     pp_save = st.form_submit_button("Save Payment", type="primary")
@@ -400,22 +497,46 @@ def render_credit_page(conn):
                     pp_cancel = st.form_submit_button("Cancel")
 
             if pp_save:
-                conn.execute(
-                    "INSERT INTO payments (type, reference_id, payment_date, amount_paid, notes) "
-                    "VALUES (?,?,?,?,?)",
-                    ("payable", paying_pay_id, pp_date.isoformat(),
-                     pp_amount, pp_notes.strip() or None),
-                )
-                new_total = pay_row["total_paid"] + pp_amount
-                new_status = "paid" if new_total >= pay_row["amount"] else "partial"
-                conn.execute("UPDATE payables SET status=? WHERE id=?", (new_status, paying_pay_id))
-                conn.commit()
-                st.session_state.pop("paying_pay_id", None)
-                st.success("Payment recorded.")
-                st.rerun()
+                if pp_amount <= 0:
+                    st.error("Amount must be greater than zero.")
+                elif pp_amount > balance_rem + 0.01:
+                    st.error(f"Amount {_inr(pp_amount)} exceeds balance {_inr(balance_rem)}, reduce the amount.")
+                else:
+                    conn.execute(
+                        "INSERT INTO payments (type, reference_id, payment_date, amount_paid, notes) "
+                        "VALUES (?,?,?,?,?)",
+                        ("payable", paying_pay_id, pp_date.isoformat(),
+                         pp_amount, pp_notes.strip() or None),
+                    )
+                    new_total = pay_row["total_paid"] + pp_amount
+                    new_status = "paid" if new_total >= pay_row["amount"] else "partial"
+                    conn.execute("UPDATE payables SET status=? WHERE id=?", (new_status, paying_pay_id))
+                    conn.commit()
+                    st.session_state.pop("paying_pay_id", None)
+                    st.success("Payment recorded.")
+                    st.rerun()
             if pp_cancel:
                 st.session_state.pop("paying_pay_id", None)
                 st.rerun()
+
+    # Payable delete confirm flow
+    confirm_del_pay = st.session_state.get("confirm_del_pay_id")
+    if confirm_del_pay:
+        del_p = conn.execute("SELECT vendor_name, amount FROM payables WHERE id=?", (confirm_del_pay,)).fetchone()
+        if del_p:
+            st.warning(f"Delete payable to **{del_p['vendor_name']}** ({_inr(del_p['amount'])})? This also removes any payment records. Cannot be undone.")
+            dc3, dc4, _ = st.columns([1, 1, 8])
+            with dc3:
+                if st.button("Yes, delete", key="conf_del_pay_yes", type="primary"):
+                    conn.execute("DELETE FROM payments WHERE type='payable' AND reference_id=?", (confirm_del_pay,))
+                    conn.execute("DELETE FROM payables WHERE id=?", (confirm_del_pay,))
+                    conn.commit()
+                    st.session_state.pop("confirm_del_pay_id", None)
+                    st.rerun()
+            with dc4:
+                if st.button("Cancel", key="conf_del_pay_no"):
+                    st.session_state.pop("confirm_del_pay_id", None)
+                    st.rerun()
 
     # Payables table
     out_pays = _outstanding_payables(conn)
@@ -423,8 +544,8 @@ def render_credit_page(conn):
     if not out_pays:
         st.success("No outstanding payables.")
     else:
-        PAY_COLS = [1.7, 1.5, 1.0, 0.85, 0.75, 1.15, 0.7]
-        PAY_HDRS = ["Vendor", "Description", "Amount", "Date", "Days", "Balance", ""]
+        PAY_COLS = [1.7, 1.5, 1.0, 0.85, 0.75, 1.15, 0.55, 0.45]
+        PAY_HDRS = ["Vendor", "Description", "Amount", "Date", "Days", "Balance", "", ""]
         _table_header(PAY_COLS, PAY_HDRS)
 
         total_balance_p = 0.0
@@ -437,14 +558,14 @@ def render_credit_page(conn):
 
             r = st.columns(PAY_COLS)
             r[0].markdown(f"<div style='{cell}'>{pay['vendor_name']}</div>", unsafe_allow_html=True)
-            r[1].markdown(f"<div style='{cell};color:#aaa'>{pay['description'] or '—'}</div>", unsafe_allow_html=True)
+            r[1].markdown(f"<div style='{cell};color:#8B6A45'>{pay['description'] or '—'}</div>", unsafe_allow_html=True)
             r[2].markdown(f"<div style='{cell}'>{_inr(pay['amount'])}</div>", unsafe_allow_html=True)
-            r[3].markdown(f"<div style='{cell};color:#aaa'>{pay['date']}</div>", unsafe_allow_html=True)
+            r[3].markdown(f"<div style='{cell};color:#8B6A45'>{pay['date']}</div>", unsafe_allow_html=True)
             r[4].markdown(
                 f"<div style='{cell};color:{dc};font-weight:bold'>{days}d</div>",
                 unsafe_allow_html=True,
             )
-            partial_tag = " <span style='font-size:11px;color:#aaa'>(partial)</span>" if pay["status"] == "partial" else ""
+            partial_tag = " <span style='font-size:11px;color:#8B6A45'>(partial)</span>" if pay["status"] == "partial" else ""
             r[5].markdown(
                 f"<div style='{cell};color:{dc};font-weight:bold'>{_inr(balance)}{partial_tag}</div>",
                 unsafe_allow_html=True,
@@ -453,9 +574,12 @@ def render_credit_page(conn):
                 st.session_state["paying_pay_id"] = pay["id"]
                 st.session_state.pop("paying_rec_id", None)
                 st.rerun()
+            if r[7].button("Del", key=f"del_pay_{pay['id']}", use_container_width=True):
+                st.session_state["confirm_del_pay_id"] = pay["id"]
+                st.rerun()
 
         st.markdown(
-            f"<div style='border-top:1px solid #333;padding-top:8px;font-size:14px'>"
+            f"<div style='border-top:1px solid #E8D5B7;padding-top:8px;font-size:14px'>"
             f"<b>Total Outstanding: {_inr(total_balance_p)}</b></div>",
             unsafe_allow_html=True,
         )
@@ -468,11 +592,11 @@ def render_credit_page(conn):
     """).fetchall()
 
     if paid_pays:
-        with st.expander(f"Payment History — {len(paid_pays)} paid payable(s)", expanded=False):
+        with st.expander(f"Payment History: {len(paid_pays)} paid payable(s)", expanded=False):
             for pp in paid_pays:
                 desc_str = f" · {pp['description']}" if pp["description"] else ""
                 st.markdown(
-                    f"✅ **{pp['vendor_name']}**{desc_str} — "
+                    f"✅ **{pp['vendor_name']}**{desc_str}, "
                     f"{_inr(pp['amount'])} · *{pp['date']}*"
                 )
                 pay_rows = conn.execute(
@@ -481,5 +605,5 @@ def render_credit_page(conn):
                     (pp["id"],),
                 ).fetchall()
                 for pay in pay_rows:
-                    note = f" — {pay['notes']}" if pay["notes"] else ""
+                    note = f", {pay['notes']}" if pay["notes"] else ""
                     st.markdown(f"&nbsp;&nbsp;&nbsp;↳ {pay['payment_date']}: {_inr(pay['amount_paid'])}{note}")

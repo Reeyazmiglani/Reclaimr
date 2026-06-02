@@ -18,26 +18,73 @@ STATUSES       = ["received", "in_production", "ready", "dispatched"]
 SHIP_TERMS     = ["FOB", "CIF", "EXW", "DAP"]
 DEFAULT_XR     = {"USD": 83.50, "EUR": 90.20, "GBP": 105.80, "INR": 1.0}
 
+_WARM_CSS = (
+    "<style>"
+    "@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600&display=swap');"
+    "* { font-family: 'DM Sans', sans-serif !important; }"
+    "[class*='material-symbols'] { font-family: 'Material Symbols Rounded' !important; }"
+    "[data-testid='metric-container']{background:#FFF8F0;border:1px solid #E8D5B7;"
+    "border-radius:10px;padding:14px 18px}"
+    "[data-testid='stMetricValue']{color:#2C2218}"
+    "[data-testid='stMetricLabel']{color:#8B6A45}"
+    "hr{border-color:#E8D5B7!important}"
+    "h1{border-bottom:3px solid #C17F3E;padding-bottom:6px;display:inline-block}"
+    "h2,h3{color:#2C2218}"
+    "[data-testid='stDataFrame'] th{background:#FFF8F0!important;color:#2C2218!important;"
+    "border:1px solid #E8D5B7!important}"
+    "[data-testid='stDataFrame'] td{border-color:#E8D5B7!important}"
+    "div[data-baseweb='input']{border:1px solid #C5A882!important;border-radius:6px!important}div[data-baseweb='textarea']{border:1px solid #C5A882!important;border-radius:6px!important}div[data-baseweb='select'] > div:first-child{border:1px solid #C5A882!important;border-radius:6px!important}"
+    "</style>"
+)
+_DARK_CSS = (
+    "<style>"
+    "@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600&display=swap');"
+    "* { font-family: 'DM Sans', sans-serif !important; }"
+    "[class*='material-symbols'] { font-family: 'Material Symbols Rounded' !important; }"
+    "[data-testid='stAppViewContainer']{background:#1A1410!important}"
+    "[data-testid='stHeader']{background:#1A1410!important}"
+    "[data-testid='metric-container']{background:#2C2218!important;border:1px solid #4A3728!important;"
+    "border-radius:10px;padding:14px 18px}"
+    "[data-testid='stMetricValue']{color:#F5E6D3!important}"
+    "[data-testid='stMetricLabel']{color:#C4A882!important}"
+    "[data-testid='stSidebar']{background:#1E160E!important}"
+    "hr{border-color:#4A3728!important}"
+    "h1{border-bottom:3px solid #C17F3E;padding-bottom:6px;display:inline-block;color:#F5E6D3!important}"
+    "h2,h3{color:#F5E6D3!important}"
+    "[data-testid='stDataFrame'] th{background:#2C2218!important;color:#F5E6D3!important;"
+    "border:1px solid #4A3728!important}"
+    "[data-testid='stDataFrame'] td{border-color:#4A3728!important}"
+    "div[data-baseweb='input']{border:1px solid #4A3728!important;border-radius:6px!important;background:#231C14!important}"
+    "div[data-baseweb='input'] input{background:#231C14!important;color:#F5E6D3!important}"
+    "div[data-baseweb='textarea']{border:1px solid #4A3728!important;border-radius:6px!important;background:#231C14!important}"
+    "div[data-baseweb='textarea'] textarea{background:#231C14!important;color:#F5E6D3!important}"
+    "div[data-baseweb='select'] > div:first-child{border:1px solid #4A3728!important;border-radius:6px!important;background:#231C14!important}"
+    "[data-testid='stForm']{background:#2C2218!important;border-color:#4A3728!important}"
+    "[data-testid='stExpander'] details{background:#2C2218!important;border-color:#4A3728!important}"
+    "</style>"
+)
+
 TABLE_CSS = (
     "<style>"
     ".etbl{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:12px}"
-    ".etbl th,.etbl td{border:1px solid #444;padding:7px 11px;text-align:left;white-space:nowrap}"
-    ".etbl thead tr{background:#2a2a2a}"
-    ".etbl tbody tr:hover{background:#1e2a3a}"
-    ".act-btn{display:inline-block;padding:3px 10px;margin:0 2px;border:1px solid #555;"
-    "border-radius:4px;text-decoration:none;color:#fff;font-size:12px;white-space:nowrap}"
-    ".act-btn:hover{background:#3a3a3a;text-decoration:none;color:#fff}"
-    ".act-btn.del{border-color:#c0392b;color:#e74c3c}"
-    ".act-btn.del:hover{background:#2d1b1b}"
-    ".act-btn.done{border-color:#27ae60;color:#2ecc71}"
+    ".etbl th,.etbl td{border:1px solid #E8D5B7;padding:7px 11px;text-align:left;white-space:nowrap}"
+    ".etbl thead tr{background:#FFF0DC;color:#2C2218;font-weight:600}"
+    ".etbl tbody tr:nth-child(even){background:#FFF8F0}"
+    ".etbl tbody tr:hover{background:#FFEDD5}"
+    ".act-btn{display:inline-block;padding:3px 0;margin:0 2px;min-width:38px;text-align:center;border:1px solid #E8D5B7;"
+    "border-radius:4px;text-decoration:none;color:#2C2218;font-size:12px;white-space:nowrap}"
+    ".act-btn:hover{background:#FFF0DC;text-decoration:none;color:#2C2218}"
+    ".act-btn.del{border-color:#C0392B;color:#C0392B}"
+    ".act-btn.del:hover{background:#FFF0EE}"
+    ".act-btn.done{border-color:#1B7F4F;color:#1B7F4F}"
     "</style>"
 )
 
 STATUS_COLOURS = {
-    "received":     "#3498db",
-    "in_production":"#e67e22",
-    "ready":        "#2ecc71",
-    "dispatched":   "#888",
+    "received":     "#C17F3E",
+    "in_production":"#D97706",
+    "ready":        "#1B7F4F",
+    "dispatched":   "#8B6A45",
 }
 
 
@@ -54,9 +101,25 @@ def _calc_inr(rate, qty, rt_label, xr):
     return rate * xr
 
 
+_LOGO_HTML = (
+    "<div style='text-align:center;padding:20px 0 10px 0'>"
+    "<svg width='80' height='80' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'>"
+    "<path d='M 68 18 A 48 48 0 1 0 96 50' fill='none' stroke='#C17F3E' stroke-width='5' stroke-linecap='round'/>"
+    "<polygon points='96,36 82,52 104,54' fill='#C17F3E'/>"
+    "<circle cx='50' cy='50' r='10' fill='#C17F3E'/>"
+    "<circle cx='50' cy='50' r='4.5' fill='transparent'/>"
+    "</svg>"
+    "<div style='font-family:DM Sans,sans-serif;font-size:20px;font-weight:700;color:#C17F3E;margin-top:6px'>Reclaimr</div>"
+    "<div style='font-family:DM Sans,sans-serif;font-size:9px;letter-spacing:2px;color:#8B6A45;margin-top:2px'>MANUFACTURING ERP</div>"
+    "</div>"
+)
+
+
 def render_exports_page(conn):
+    st.markdown(_DARK_CSS if st.session_state.get("dark_mode") else _WARM_CSS, unsafe_allow_html=True)
+    st.sidebar.markdown(_LOGO_HTML, unsafe_allow_html=True)
     st.header("Exports")
-    st.caption("International orders tracked separately — currencies, shipping terms, and margins all in one place.")
+    st.caption("International orders tracked separately, currencies, shipping terms, and margins all in one place.")
     this_month = date.today().strftime("%Y-%m")
 
     # ── Handle query params ────────────────────────────────────────────────────
@@ -235,7 +298,7 @@ def render_exports_page(conn):
                                             key="exp_xr", disabled=xr_disabled)
         actual_xr = 1.0 if xr_disabled else exchange_rate
         inr_equiv = _calc_inr(rate, quantity, rate_type, actual_xr)
-        st.text_input("INR Equivalent (auto)", value=f"₹{inr_equiv:,.2f}", disabled=True, key="exp_inr_disp")
+        st.text_input("INR equivalent (auto)", value=f"₹{inr_equiv:,.2f}", disabled=True, key="exp_inr_disp")
 
         fod, fdd    = st.columns(2)
         with fod: order_date    = st.date_input("Order date *", value=date.today(), key="exp_od")
@@ -244,7 +307,7 @@ def render_exports_page(conn):
         with fst: status        = st.selectbox("Status", STATUSES, key="exp_status")
         with fsh: shipping_terms= st.selectbox("Shipping terms", SHIP_TERMS, key="exp_ship")
 
-    notes = st.text_area("Notes (optional)", key="exp_notes")
+    notes = st.text_area("Notes (optional)", key="exp_notes", placeholder="Add notes...")
 
     if st.button("💾 Save Export Order", type="primary"):
         if not customer.strip() or not country.strip() or not product.strip():
@@ -322,7 +385,7 @@ def render_exports_page(conn):
     exports = conn.execute(esql, eqp).fetchall()
 
     if not exports:
-        st.info("No exports match — adjust the filters above.")
+        st.info("No exports match, adjust the filters above.")
         return
 
     rows_html = ""
@@ -375,7 +438,7 @@ def render_exports_page(conn):
         for ex in pending_exp:
             ea, eb, ec = st.columns([0.6, 5, 1.8])
             ea.markdown(f"**#{ex['id']}**")
-            eb.write(f"{ex['customer_name']} ({ex['country']}) — {ex['product']} &nbsp; `{ex['status']}`")
+            eb.write(f"{ex['customer_name']} ({ex['country']}), {ex['product']} &nbsp; `{ex['status']}`")
             if ec.button("✓ Mark Done", key=f"exp_done_{ex['id']}", type="primary"):
                 conn.execute("UPDATE exports SET status='dispatched' WHERE id=?", (ex["id"],))
                 conn.commit()
@@ -387,7 +450,7 @@ def render_exports_page(conn):
         row = conn.execute("SELECT id, customer_name, country FROM exports WHERE id=?",
                            (conf_id,)).fetchone()
         if row:
-            st.warning(f"Delete export #{row['id']} ({row['customer_name']} — {row['country']})? Cannot be undone.")
+            st.warning(f"Delete export #{row['id']} ({row['customer_name']}, {row['country']})? Cannot be undone.")
             yc, nc, _ = st.columns([1,1,8])
             with yc:
                 if st.button("Yes, delete", type="primary"):
