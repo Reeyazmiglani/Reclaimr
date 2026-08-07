@@ -70,6 +70,11 @@ _WARM_CSS = (
     "border:1px solid #E8D5B7!important}"
     "[data-testid='stDataFrame'] td{border-color:#E8D5B7!important}"
     "div[data-baseweb='input']{border:1px solid #C5A882!important;border-radius:6px!important}div[data-baseweb='textarea']{border:1px solid #C5A882!important;border-radius:6px!important}div[data-baseweb='select'] > div:first-child{border:1px solid #C5A882!important;border-radius:6px!important}"
+    "[data-testid='stSidebarNav']{display:none!important}"
+    "[data-testid='stSidebarNavItems']{display:none!important}"
+    ".block-container{padding-top:1rem!important;padding-bottom:1rem!important;overflow:visible!important}"
+    "header{display:none!important}"
+    "details[data-testid='stExpander'] summary span:first-of-type{font-family:'Material Symbols Rounded'!important;font-style:normal!important}"
     "</style>"
 )
 _DARK_CSS = (
@@ -97,20 +102,25 @@ _DARK_CSS = (
     "div[data-baseweb='select'] > div:first-child{border:1px solid #4A3728!important;border-radius:6px!important;background:#231C14!important}"
     "[data-testid='stForm']{background:#2C2218!important;border-color:#4A3728!important}"
     "[data-testid='stExpander'] details{background:#2C2218!important;border-color:#4A3728!important}"
+    "[data-testid='stSidebarNav']{display:none!important}"
+    "[data-testid='stSidebarNavItems']{display:none!important}"
+    ".block-container{padding-top:1rem!important;padding-bottom:1rem!important;overflow:visible!important}"
+    "header{display:none!important}"
+    "details[data-testid='stExpander'] summary span:first-of-type{font-family:'Material Symbols Rounded'!important;font-style:normal!important}"
     "</style>"
 )
 
 
 _VOICE_JS = """
-<div style="margin:0;padding:4px 0">
+<div style="margin:0;padding:2px 0">
   <button id="vbtn" onclick="startVoice()"
-    style="background:#1A1410;border:1px solid #C17F3E;color:#C17F3E;
-           padding:8px 18px;border-radius:6px;cursor:pointer;
-           font-size:14px;font-family:DM Sans,sans-serif;font-weight:500">
+    style="background:transparent;border:1px solid #C17F3E;color:#C17F3E;
+           padding:5px 14px;border-radius:6px;cursor:pointer;
+           font-size:13px;font-family:DM Sans,sans-serif">
     🎤 Speak Order
   </button>
   <span id="vstatus"
-    style="margin-left:12px;font-size:13px;color:#8B6A45;font-family:DM Sans,sans-serif"></span>
+    style="margin-left:10px;font-size:12px;color:#8B6A45;font-family:DM Sans,sans-serif"></span>
 </div>
 <script>
 function startVoice() {
@@ -150,7 +160,7 @@ def _extract_order_from_voice(text: str):
     try:
         client = Groq(api_key=api_key)
         resp = client.chat.completions.create(
-            model="llama3-8b-8192",
+            model="llama-3.1-8b-instant",
             messages=[
                 {
                     "role": "system",
@@ -174,22 +184,20 @@ def _extract_order_from_voice(text: str):
 
 
 _LOGO_HTML = (
-    "<div style='text-align:center;padding:20px 0 10px 0'>"
-    "<svg width='80' height='80' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'>"
-    "<path d='M 68 18 A 48 48 0 1 0 96 50' fill='none' stroke='#C17F3E' stroke-width='5' stroke-linecap='round'/>"
-    "<polygon points='96,36 82,52 104,54' fill='#C17F3E'/>"
-    "<circle cx='50' cy='50' r='10' fill='#C17F3E'/>"
-    "<circle cx='50' cy='50' r='4.5' fill='transparent'/>"
+    "<div style='padding:12px 16px 8px 16px;display:flex;align-items:center;gap:10px'>"
+    "<svg width='30' height='30' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'>"
+    "<path d='M 50 10 A 40 40 0 1 0 85 65' fill='none' stroke='#C17F3E' stroke-width='7' stroke-linecap='round'/>"
+    "<polygon points='85,50 95,68 75,68' fill='#C17F3E'/>"
+    "<circle cx='50' cy='50' r='8' fill='#C17F3E'/>"
+    "<circle cx='50' cy='50' r='3.5' fill='#FDFAF6'/>"
     "</svg>"
-    "<div style='font-family:DM Sans,sans-serif;font-size:20px;font-weight:700;color:#C17F3E;margin-top:6px'>Reclaimr</div>"
-    "<div style='font-family:DM Sans,sans-serif;font-size:9px;letter-spacing:2px;color:#8B6A45;margin-top:2px'>MANUFACTURING ERP</div>"
+    "<span style='font-family:DM Sans,sans-serif;font-size:16px;font-weight:700;color:#C17F3E;letter-spacing:0.02em'>Reclaimr</span>"
     "</div>"
 )
 
 
 def render_orders_page(conn):
     st.markdown(_DARK_CSS if st.session_state.get("dark_mode") else _WARM_CSS, unsafe_allow_html=True)
-    st.sidebar.markdown(_LOGO_HTML, unsafe_allow_html=True)
     # Ensure batch_reference column exists on cached connections
     try:
         conn.execute("ALTER TABLE orders ADD COLUMN batch_reference TEXT")
@@ -363,32 +371,29 @@ def render_orders_page(conn):
     batch_opts = ["(Not assigned)"] + b_labels + ["Not yet produced / Enter manually"]
 
     # ── Optional voice input ─────────────────────────────────────────────────────
-    with st.expander("🎤 Voice Input — speak to auto-fill the form (optional)"):
-        components.html(_VOICE_JS, height=52)
-        st.caption("Click the mic, speak your order details, and the form below will be pre-filled automatically. Works in Chrome and Edge.")
+    components.html(_VOICE_JS, height=40)
 
-        if st.session_state.get("voice_error"):
-            st.error("Could not extract order details — please try again or fill the form manually.")
-            st.session_state.pop("voice_error", None)
+    if st.session_state.get("voice_error"):
+        st.error("Could not extract order details — please try again or fill the form manually.")
+        st.session_state.pop("voice_error", None)
 
-        pf = st.session_state.get("voice_prefill", {})
-        if pf:
-            raw = st.session_state.get("voice_raw", "")
-            st.success(f'Extracted from: "{raw}"')
-            mc1, mc2, mc3, mc4 = st.columns(4)
-            mc1.metric("Company", pf.get("company") or "—")
-            mc2.metric("Customer", pf.get("customer_name") or "—")
-            mc3.metric("Product", pf.get("product") or "—")
-            mc4.metric("Qty / Rate", f"{pf.get('quantity') or '—'} {pf.get('unit') or ''} @ {pf.get('rate') or '—'}")
-            st.caption("The form below is pre-filled. Edit any field before saving.")
-            if st.button("✕ Clear voice pre-fill", key="clear_voice"):
+    pf = st.session_state.get("voice_prefill", {})
+    if pf:
+        _summary = " · ".join(filter(None, [
+            pf.get("company"), pf.get("customer_name"), pf.get("product"),
+            f"{pf.get('quantity')} {pf.get('unit') or ''}".strip() if pf.get("quantity") else None,
+        ]))
+        _vc, _vb = st.columns([0.88, 0.12])
+        with _vc:
+            st.info(f"🎤 Pre-filled from voice: {_summary} — edit any field below before saving.")
+        with _vb:
+            st.write("")
+            if st.button("✕ Clear", key="clear_voice"):
                 st.session_state.pop("voice_prefill", None)
                 st.session_state.pop("voice_raw", None)
                 st.rerun()
 
-    pf = st.session_state.get("voice_prefill", {})
-
-    # ── Manual / pre-filled form ─────────────────────────────────────────────────
+    # ── New order form ───────────────────────────────────────────────────────────
     with st.form("order_form"):
         _co_idx = COMPANIES.index(pf["company"]) if pf.get("company") in COMPANIES else 0
         company = st.selectbox("Company", COMPANIES, index=_co_idx)

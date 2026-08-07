@@ -17,7 +17,7 @@ _GREEN  = "#1B7F4F"
 _YELLOW = "#D97706"
 _RED    = "#C0392B"
 _BLUE   = "#C17F3E"
-_GROQ_MODEL = "llama-3.3-70b-versatile"
+_GROQ_MODEL = "openai/gpt-oss-120b"
 
 _WARM_CSS = (
     "<style>"
@@ -35,6 +35,11 @@ _WARM_CSS = (
     "border:1px solid #E8D5B7!important}"
     "[data-testid='stDataFrame'] td{border-color:#E8D5B7!important}"
     "div[data-baseweb='input']{border:1px solid #C5A882!important;border-radius:6px!important}div[data-baseweb='textarea']{border:1px solid #C5A882!important;border-radius:6px!important}div[data-baseweb='select'] > div:first-child{border:1px solid #C5A882!important;border-radius:6px!important}"
+    "[data-testid='stSidebarNav']{display:none!important}"
+    "[data-testid='stSidebarNavItems']{display:none!important}"
+    ".block-container{padding-top:1rem!important;padding-bottom:1rem!important;overflow:visible!important}"
+    "header{display:none!important}"
+    "details[data-testid='stExpander'] summary span:first-of-type{font-family:'Material Symbols Rounded'!important;font-style:normal!important}"
     "</style>"
 )
 _DARK_CSS = (
@@ -62,6 +67,11 @@ _DARK_CSS = (
     "div[data-baseweb='select'] > div:first-child{border:1px solid #4A3728!important;border-radius:6px!important;background:#231C14!important}"
     "[data-testid='stForm']{background:#2C2218!important;border-color:#4A3728!important}"
     "[data-testid='stExpander'] details{background:#2C2218!important;border-color:#4A3728!important}"
+    "[data-testid='stSidebarNav']{display:none!important}"
+    "[data-testid='stSidebarNavItems']{display:none!important}"
+    ".block-container{padding-top:1rem!important;padding-bottom:1rem!important;overflow:visible!important}"
+    "header{display:none!important}"
+    "details[data-testid='stExpander'] summary span:first-of-type{font-family:'Material Symbols Rounded'!important;font-style:normal!important}"
     "</style>"
 )
 _SYSTEM_PROMPT = (
@@ -90,7 +100,7 @@ def _groq_call(prompt: str) -> str:
         return "ERROR:no_key"
     client = Groq(api_key=key)
     resp = client.chat.completions.create(
-        model=_GROQ_MODEL, max_tokens=300,
+        model=_GROQ_MODEL, max_tokens=300, reasoning_effort="low",
         messages=[
             {"role": "system", "content": _SYSTEM_PROMPT},
             {"role": "user",   "content": prompt},
@@ -268,22 +278,20 @@ def _week_item(top, bottom):
 
 
 _LOGO_HTML = (
-    "<div style='text-align:center;padding:20px 0 10px 0'>"
-    "<svg width='80' height='80' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'>"
-    "<path d='M 68 18 A 48 48 0 1 0 96 50' fill='none' stroke='#C17F3E' stroke-width='5' stroke-linecap='round'/>"
-    "<polygon points='96,36 82,52 104,54' fill='#C17F3E'/>"
-    "<circle cx='50' cy='50' r='10' fill='#C17F3E'/>"
-    "<circle cx='50' cy='50' r='4.5' fill='transparent'/>"
+    "<div style='padding:12px 16px 8px 16px;display:flex;align-items:center;gap:10px'>"
+    "<svg width='30' height='30' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'>"
+    "<path d='M 50 10 A 40 40 0 1 0 85 65' fill='none' stroke='#C17F3E' stroke-width='7' stroke-linecap='round'/>"
+    "<polygon points='85,50 95,68 75,68' fill='#C17F3E'/>"
+    "<circle cx='50' cy='50' r='8' fill='#C17F3E'/>"
+    "<circle cx='50' cy='50' r='3.5' fill='#FDFAF6'/>"
     "</svg>"
-    "<div style='font-family:DM Sans,sans-serif;font-size:20px;font-weight:700;color:#C17F3E;margin-top:6px'>Reclaimr</div>"
-    "<div style='font-family:DM Sans,sans-serif;font-size:9px;letter-spacing:2px;color:#8B6A45;margin-top:2px'>MANUFACTURING ERP</div>"
+    "<span style='font-family:DM Sans,sans-serif;font-size:16px;font-weight:700;color:#C17F3E;letter-spacing:0.02em'>Reclaimr</span>"
     "</div>"
 )
 
 
 def render_intelligence_page(conn):
     st.markdown(_DARK_CSS if st.session_state.get("dark_mode") else _WARM_CSS, unsafe_allow_html=True)
-    st.sidebar.markdown(_LOGO_HTML, unsafe_allow_html=True)
     _ensure_tables(conn)
     today = date.today()
     now_str = datetime.now().strftime("%H:%M")

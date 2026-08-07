@@ -28,7 +28,17 @@
       "Bash(python -c \"import sqlite3; conn = sqlite3.connect\\('db/erp.db'\\); rows = conn.execute\\(\\\\\"SELECT id, product FROM orders WHERE product LIKE '%ntiod%' OR product LIKE '%Anti%'\\\\\"\\).fetchall\\(\\); print\\(rows\\)\")",
       "Bash(python -c \"import sqlite3; conn = sqlite3.connect\\('db/erp.db'\\); conn.execute\\(\\\\\"UPDATE orders SET product = 'Anti Odour' WHERE product = 'Antiordour'\\\\\"\\); conn.commit\\(\\); count = conn.execute\\(\\\\\"SELECT COUNT\\(*\\) FROM orders WHERE product = 'Anti Odour'\\\\\"\\).fetchone\\(\\)[0]; print\\(f'Updated. Anti Odour count: {count}'\\)\")",
       "Bash(Test-Path \"C:\\\\Users\\\\DELL\\\\OneDrive\\\\Pictures\\\\Documents\\\\Claude\\\\Projects\\\\ERP\\\\.streamlit\")",
-      "Bash(mkdir -p \"c:\\\\Users\\\\DELL\\\\OneDrive\\\\Pictures\\\\Documents\\\\Claude\\\\Projects\\\\ERP\\\\.streamlit\")"
+      "Bash(mkdir -p \"c:\\\\Users\\\\DELL\\\\OneDrive\\\\Pictures\\\\Documents\\\\Claude\\\\Projects\\\\ERP\\\\.streamlit\")",
+      "Skill(run)",
+      "Skill(run:*)",
+      "Bash(echo \"Streamlit starting in background PID=$!\")",
+      "PowerShell(Start-Process \"http://localhost:8501\")",
+      "Bash(tasklist)",
+      "Bash(taskkill /PID 12188 /F)",
+      "PowerShell(Stop-Process -Id 12188 -Force)",
+      "PowerShell(Start-Process -FilePath \"streamlit\" -ArgumentList \"run\",\"C:\\\\Users\\\\Dell\\\\OneDrive\\\\Pictures\\\\Documents\\\\Anaconda\\\\Claude\\\\Projects\\\\ERP\\\\app.py\" -WindowStyle Normal)",
+      "PowerShell(\\(Get-Command python\\).Source; python -m streamlit --version 2>$null)",
+      "PowerShell(Start-Process -FilePath \"C:\\\\Python314\\\\python.exe\" -ArgumentList \"-m\",\"streamlit\",\"run\",\"C:\\\\Users\\\\Dell\\\\OneDrive\\\\Pictures\\\\Documents\\\\Anaconda\\\\Claude\\\\Projects\\\\ERP\\\\app.py\" -WorkingDirectory \"C:\\\\Users\\\\Dell\\\\OneDrive\\\\Pictures\\\\Documents\\\\Anaconda\\\\Claude\\\\Projects\\\\ERP\" -WindowStyle Normal)"
     ],
     "additionalDirectories": [
       "c:\\Users\\DELL\\OneDrive\\Pictures\\Documents\\Claude\\Projects\\ERP"
