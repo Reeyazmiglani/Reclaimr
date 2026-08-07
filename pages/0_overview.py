@@ -9,9 +9,12 @@ from utils.settings import get_overdue_days
 load_dotenv()
 
 
+DB_PATH = os.getenv("DB_PATH", "db/erp.db")
+
+
 @st.cache_resource
 def _get_conn():
-    return init_db(Path("db") / "erp.db")
+    return init_db(Path(DB_PATH))
 
 
 _GREEN  = "#1B7F4F"

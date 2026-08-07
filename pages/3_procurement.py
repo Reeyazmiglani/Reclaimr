@@ -11,9 +11,12 @@ from utils.voice import transcribe_audio
 from utils.export import export_to_excel, export_to_pdf
 
 
+DB_PATH = os.getenv("DB_PATH", "db/erp.db")
+
+
 @st.cache_resource
 def _get_conn():
-    return init_db(Path("db") / "erp.db")
+    return init_db(Path(DB_PATH))
 
 
 UNITS = ["kg", "tonnes", "litres", "bags"]

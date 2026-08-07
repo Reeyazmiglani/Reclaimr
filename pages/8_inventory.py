@@ -1,3 +1,4 @@
+import os
 import streamlit as st
 import pandas as pd
 from datetime import date
@@ -5,10 +6,12 @@ from pathlib import Path
 from db.schema import init_db
 from utils.settings import get_stock_thresholds, set_stock_thresholds, DEFAULT_STOCK_THRESHOLDS
 
+DB_PATH = os.getenv("DB_PATH", "db/erp.db")
+
 
 @st.cache_resource
 def _get_conn():
-    return init_db(Path("db") / "erp.db")
+    return init_db(Path(DB_PATH))
 
 
 _GREEN  = "#1B7F4F"

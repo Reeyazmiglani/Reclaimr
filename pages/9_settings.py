@@ -16,10 +16,12 @@ from utils.settings import (
 
 load_dotenv()
 
+DB_PATH = os.getenv("DB_PATH", "db/erp.db")
+
 
 @st.cache_resource
 def _get_conn():
-    return init_db(Path("db") / "erp.db")
+    return init_db(Path(DB_PATH))
 
 
 _GREEN  = "#1B7F4F"
@@ -195,7 +197,7 @@ def render_settings_page(conn):
     # ══════════════════════════════════════════════════════════════════════
     st.subheader("Data Management")
 
-    db_path = Path("db") / "erp.db"
+    db_path = Path(DB_PATH)
     tables = [r[0] for r in conn.execute(
         "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
     ).fetchall()]

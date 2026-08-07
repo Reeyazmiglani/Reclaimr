@@ -1,3 +1,4 @@
+import os
 import importlib.util
 import streamlit as st
 import plotly.graph_objects as go
@@ -9,10 +10,12 @@ from utils.settings import get_dark_mode, set_dark_mode
 
 st.set_page_config(page_title="Reclaimr", layout="wide")
 
+DB_PATH = os.getenv("DB_PATH", "db/erp.db")
+
 
 @st.cache_resource
 def get_conn():
-    return init_db(Path("db") / "erp.db")
+    return init_db(Path(DB_PATH))
 
 
 conn = get_conn()

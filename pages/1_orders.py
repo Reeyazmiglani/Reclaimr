@@ -12,9 +12,12 @@ from utils.export import export_to_excel, export_to_pdf, generate_dispatch_note
 from utils.settings import get_company_details
 
 
+DB_PATH = os.getenv("DB_PATH", "db/erp.db")
+
+
 @st.cache_resource
 def _get_conn():
-    return init_db(Path("db") / "erp.db")
+    return init_db(Path(DB_PATH))
 
 COMPANIES = ["Rwox", "Elastohorse"]
 ORDER_STATUSES = ["received", "in_production", "ready", "dispatched", "cancelled"]

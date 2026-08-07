@@ -1,12 +1,15 @@
+import os
 import streamlit as st
 from datetime import date
 from pathlib import Path
 from db.schema import init_db
 
+DB_PATH = os.getenv("DB_PATH", "db/erp.db")
+
 
 @st.cache_resource
 def _get_conn():
-    return init_db(Path("db") / "erp.db")
+    return init_db(Path(DB_PATH))
 
 
 COMPANIES      = ["Rwox", "Elastohorse"]
