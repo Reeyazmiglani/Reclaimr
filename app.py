@@ -5,9 +5,12 @@ import plotly.graph_objects as go
 import pandas as pd
 from datetime import date, timedelta
 from pathlib import Path
+from dotenv import load_dotenv
 from db.schema import init_db
 from utils.settings import get_dark_mode, set_dark_mode
-from utils.auth import require_auth, render_login_signup, render_logout_button
+from utils.auth import restore_session, render_login_signup, render_logout_button
+
+load_dotenv()
 
 st.set_page_config(page_title="Reclaimr", layout="wide")
 
@@ -21,10 +24,13 @@ def get_conn():
 
 conn = get_conn()
 
-if "auth_user" not in st.session_state:
+# Tries the persistent streamlit-authenticator cookie first (so reopening
+# the browser within the 30-day window skips the login screen entirely)
+# before falling back to the login/signup form.
+current_user = restore_session(conn)
+if not current_user:
     render_login_signup(conn)
     st.stop()
-current_user = require_auth(conn)
 
 # Dark mode: default from the saved setting on first load, then keep the
 # sidebar toggle and the settings table in sync on every change.

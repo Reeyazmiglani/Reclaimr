@@ -4,8 +4,11 @@ import plotly.graph_objects as go
 from datetime import date, timedelta
 from pathlib import Path
 import math
+from dotenv import load_dotenv
 from db.schema import init_db
 from utils.auth import require_auth, render_logout_button
+
+load_dotenv()
 
 DB_PATH = os.getenv("DB_PATH", "db/erp.db")
 

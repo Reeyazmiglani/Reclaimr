@@ -3,9 +3,12 @@ import streamlit as st
 import pandas as pd
 from datetime import date
 from pathlib import Path
+from dotenv import load_dotenv
 from db.schema import init_db
 from utils.settings import get_stock_thresholds, set_stock_thresholds, DEFAULT_STOCK_THRESHOLDS
 from utils.auth import require_auth, render_logout_button
+
+load_dotenv()
 
 DB_PATH = os.getenv("DB_PATH", "db/erp.db")
 
