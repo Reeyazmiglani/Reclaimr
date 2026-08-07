@@ -128,6 +128,24 @@ def get_authenticator(conn):
     )
 
 
+def _get_authenticator(conn):
+    """Authenticate internally creates a browser-cookie component keyed
+    'init' — building a second one in the same script run raises
+    StreamlitDuplicateElementKey. app.py routes to every page by exec'ing
+    that page's module inline (see app.py's PAGE_FILES dispatch), so
+    app.py's own restore_session() and the page's require_auth() both run
+    in one script pass; this cache is what keeps that down to one instance.
+    Reused across reruns too, so credentials can lag an approval/removal
+    made *during* an already-open tab until that tab's next full reload —
+    render_login_signup() drops the cache on a failed login to paper over
+    the most common case of that (a just-approved user retrying)."""
+    authenticator = st.session_state.get("_authenticator")
+    if authenticator is None:
+        authenticator = get_authenticator(conn)
+        st.session_state["_authenticator"] = authenticator
+    return authenticator
+
+
 def _sync_session_user(conn):
     """Once streamlit-authenticator confirms authentication_status, pull the
     full row (id/role/approved) so the rest of the app can use it."""
@@ -155,7 +173,7 @@ def render_login_signup(conn):
     tab_login, tab_signup = st.tabs(["Log in", "Sign up"])
 
     with tab_login:
-        authenticator = st.session_state.get("_authenticator") or get_authenticator(conn)
+        authenticator = _get_authenticator(conn)
         try:
             authenticator.login(location="main", key="reclaimr_login_form")
         except LoginError as e:
@@ -163,6 +181,10 @@ def render_login_signup(conn):
         status = st.session_state.get("authentication_status")
         if status is False:
             st.error("Incorrect username or password.")
+            # Drop the cached authenticator so a retry rebuilds its credentials
+            # from the DB — covers "the owner just approved me, let me try again"
+            # without requiring a full page reload.
+            st.session_state.pop("_authenticator", None)
         elif status:
             _sync_session_user(conn)
             st.rerun()
@@ -191,7 +213,7 @@ def restore_session(conn):
     cookie if one is present and still valid (unexpired, names an approved
     user). Returns the user dict, or None if nobody is logged in. Never
     stops the script — callers decide what to do about a None result."""
-    authenticator = get_authenticator(conn)
+    authenticator = _get_authenticator(conn)
     if not st.session_state.get("authentication_status"):
         try:
             authenticator.login(location="unrendered")
@@ -199,7 +221,6 @@ def restore_session(conn):
             # Cookie names a user who is no longer approved/exists — treat as logged out.
             authenticator.cookie_controller.delete_cookie()
             st.session_state["authentication_status"] = None
-    st.session_state["_authenticator"] = authenticator
     return _sync_session_user(conn)
 
 
@@ -229,4 +250,5 @@ def render_logout_button():
             authenticator.authentication_controller.logout()
             authenticator.cookie_controller.delete_cookie()
         st.session_state.pop("auth_user", None)
+        st.session_state.pop("_authenticator", None)
         st.switch_page("app.py")
