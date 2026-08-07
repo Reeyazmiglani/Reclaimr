@@ -535,10 +535,12 @@ with tab1:
     cc1, cc2 = st.columns(2)
     with cc1:
         st.plotly_chart(comparison_bar(ord_c, _op, "revenue",
-            "Combined Revenue by Month (₹)"), use_container_width=True)
+            "Combined Revenue by Month (₹)"), use_container_width=True,
+            key="combined_revenue_chart")
     with cc2:
         st.plotly_chart(comparison_line(ord_c, _op, None,
-            "Combined Order Count by Month", count=True, curr_color="#1B7F4F"), use_container_width=True)
+            "Combined Order Count by Month", count=True, curr_color="#1B7F4F"), use_container_width=True,
+            key="combined_order_count_chart")
 
     # Revenue split pie
     if not ord_c.empty:
@@ -550,7 +552,7 @@ with tab1:
                 hovertemplate="<b>%{label}</b><br>₹%{value:,.0f}<br>%{percent}<extra></extra>"))
             pie.update_layout(title="Revenue Split: Rwox vs Elastohorse",
                               height=300, legend=dict(orientation="h",y=-0.2), **PLOT)
-            st.plotly_chart(pie, use_container_width=True)
+            st.plotly_chart(pie, use_container_width=True, key="revenue_split_pie_chart")
 
     st.divider()
     st.subheader("Alerts")
@@ -763,23 +765,27 @@ with tab2:
     rc1, rc2 = st.columns(2)
     with rc1:
         st.plotly_chart(comparison_bar(ro, _rp, "revenue",
-            "Revenue by Month (₹)"), use_container_width=True)
+            "Revenue by Month (₹)"), use_container_width=True,
+            key="rwox_revenue_chart")
     with rc2:
         st.plotly_chart(comparison_line(ro, _rp, None,
-            "Order Count by Month", curr_color="#1B7F4F", count=True), use_container_width=True)
+            "Order Count by Month", curr_color="#1B7F4F", count=True), use_container_width=True,
+            key="rwox_order_count_chart")
 
     rc3, rc4 = st.columns(2)
     with rc3:
         if not rc.empty and rc["supplier"].notna().any():
             vs = rc.groupby("supplier")["spend"].sum().nlargest(10).reset_index()
             st.plotly_chart(hbar(vs["spend"].tolist(), vs["supplier"].tolist(),
-                "Procurement Spend by Vendor (₹)"), use_container_width=True)
+                "Procurement Spend by Vendor (₹)"), use_container_width=True,
+                key="rwox_procurement_by_vendor_chart")
         else:
             st.info("No procurement data for this period.")
     with rc4:
         st.plotly_chart(comparison_bar(prod_c, _pp2, "output_kg",
             "Production kg by Month", curr_color="#1B7F4F", prev_color="#8B6A45",
-            prefix="", height=280), use_container_width=True)
+            prefix="", height=280), use_container_width=True,
+            key="rwox_production_kg_chart")
 
     # Procurement price trend per material
     if not rc.empty:
@@ -809,7 +815,7 @@ with tab2:
                                        categoryorder="array", categoryarray=sorted_months),
                             yaxis=dict(gridcolor="#E8D5B7"),
                             legend=dict(orientation="h",y=-0.3), **PLOT)
-            st.plotly_chart(f, use_container_width=True)
+            st.plotly_chart(f, use_container_width=True, key="rwox_material_price_trend_chart")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -839,11 +845,11 @@ with tab3:
     with ec1:
         st.plotly_chart(comparison_bar(eo, _ep, "revenue",
             "Revenue by Month (₹)", curr_color="#C17F3E", prev_color="#8B6A45"),
-            use_container_width=True)
+            use_container_width=True, key="elastohorse_revenue_chart")
     with ec2:
         st.plotly_chart(comparison_line(eo, _ep, None,
             "Order Count by Month", curr_color="#D97706", count=True),
-            use_container_width=True)
+            use_container_width=True, key="elastohorse_order_count_chart")
 
     if eo.empty:
         st.info("No Elastohorse orders in the selected period. Add one from the Orders page.")
