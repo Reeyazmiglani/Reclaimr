@@ -2,6 +2,7 @@ import streamlit as st
 from datetime import date, datetime
 from pathlib import Path
 from db.schema import init_db
+from utils.settings import get_overdue_days
 
 
 @st.cache_resource
@@ -10,7 +11,7 @@ def _get_conn():
 
 
 COMPANIES = ["Rwox", "Elastohorse"]
-OVERDUE_DAYS = 45
+OVERDUE_DAYS = 45  # default; overwritten from the Settings page's saved value on each render
 
 _WARM_CSS = (
     "<style>"
@@ -203,11 +204,14 @@ _LOGO_HTML = (
 
 
 def render_credit_page(conn):
+    global OVERDUE_DAYS
+    OVERDUE_DAYS = get_overdue_days(conn)
+
     st.markdown(_DARK_CSS if st.session_state.get("dark_mode") else _WARM_CSS, unsafe_allow_html=True)
     _ensure_credit_tables(conn)
 
     st.header("Credit & Payments")
-    st.caption("Track who owes you money and who you owe. 45-day informal credit threshold.")
+    st.caption(f"Track who owes you money and who you owe. {OVERDUE_DAYS}-day informal credit threshold (edit in Settings).")
 
     today = date.today()
 
@@ -372,15 +376,24 @@ def render_credit_page(conn):
     if not out_recs:
         st.success("No outstanding receivables.")
     else:
+        # ── Top 10 most recent by default, full history on demand ───────────────
+        rec_view_full = st.toggle("View full history", value=False, key="rec_view_full")
+        if rec_view_full:
+            display_recs = out_recs
+        else:
+            display_recs = sorted(out_recs, key=lambda r: r["date"] or "", reverse=True)[:10]
+            if len(out_recs) > 10:
+                st.caption(f"Showing the 10 most recent of {len(out_recs)} outstanding receivables — toggle above for full history.")
+
         REC_COLS = [1.6, 0.7, 1.1, 1.0, 0.85, 0.75, 1.15, 0.55, 0.45]
         REC_HDRS = ["Customer", "Co.", "Reference", "Amount", "Date", "Days", "Balance", "", ""]
         _table_header(REC_COLS, REC_HDRS)
 
-        total_balance = 0.0
-        for rec in out_recs:
+        # Total is always across ALL outstanding receivables, not just the rows shown.
+        total_balance = sum(max(r["amount"] - r["total_paid"], 0) for r in out_recs)
+        for rec in display_recs:
             days = (today - date.fromisoformat(rec["date"])).days
             balance = max(rec["amount"] - rec["total_paid"], 0)
-            total_balance += balance
             dc = _days_color(days)
             cell = "font-size:14px;padding-top:6px"
 
@@ -552,15 +565,24 @@ def render_credit_page(conn):
     if not out_pays:
         st.success("No outstanding payables.")
     else:
+        # ── Top 10 most recent by default, full history on demand ───────────────
+        pay_view_full = st.toggle("View full history", value=False, key="pay_view_full")
+        if pay_view_full:
+            display_pays = out_pays
+        else:
+            display_pays = sorted(out_pays, key=lambda p: p["date"] or "", reverse=True)[:10]
+            if len(out_pays) > 10:
+                st.caption(f"Showing the 10 most recent of {len(out_pays)} outstanding payables — toggle above for full history.")
+
         PAY_COLS = [1.7, 1.5, 1.0, 0.85, 0.75, 1.15, 0.55, 0.45]
         PAY_HDRS = ["Vendor", "Description", "Amount", "Date", "Days", "Balance", "", ""]
         _table_header(PAY_COLS, PAY_HDRS)
 
-        total_balance_p = 0.0
-        for pay in out_pays:
+        # Total is always across ALL outstanding payables, not just the rows shown.
+        total_balance_p = sum(max(p["amount"] - p["total_paid"], 0) for p in out_pays)
+        for pay in display_pays:
             days = (today - date.fromisoformat(pay["date"])).days
             balance = max(pay["amount"] - pay["total_paid"], 0)
-            total_balance_p += balance
             dc = _days_color(days)
             cell = "font-size:14px;padding-top:6px"
 

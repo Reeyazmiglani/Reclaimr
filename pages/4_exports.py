@@ -396,8 +396,15 @@ def render_exports_page(conn):
         st.info("No exports match, adjust the filters above.")
         return
 
+    # ── Top 10 most recent by default (query is already order_date DESC,
+    # created_at DESC), same filters; full history on demand ───────────────────
+    view_full = st.toggle("View full history", value=False, key="exp_view_full")
+    display_exports = exports if view_full else exports[:10]
+    if not view_full and len(exports) > 10:
+        st.caption(f"Showing the 10 most recent of {len(exports)} matching exports — toggle above for full history.")
+
     rows_html = ""
-    for ex in exports:
+    for ex in display_exports:
         rt_lbl  = "/ unit" if ex["rate_type"] == "per_unit" else "total"
         sc      = STATUS_COLOURS.get(ex["status"], "#888")
         status_badge = f"<span style='color:{sc};font-weight:600'>{ex['status']}</span>"

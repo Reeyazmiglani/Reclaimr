@@ -2,12 +2,14 @@ import os
 import json
 import math
 import streamlit as st
-import streamlit.components.v1 as components
+import pandas as pd
 from datetime import date as date_type, time as time_type, datetime, timedelta
 from pathlib import Path
 from dotenv import load_dotenv
 from groq import Groq
 from db.schema import init_db
+from utils.voice import transcribe_audio
+from utils.export import export_to_excel, export_to_pdf
 
 
 @st.cache_resource
@@ -246,47 +248,6 @@ def _ensure_tables(conn):
     conn.commit()
 
 
-_VOICE_JS_PROD = """
-<div style="margin:0;padding:4px 0">
-  <button id="vbtn" onclick="startVoice()"
-    style="background:#1A1410;border:1px solid #C17F3E;color:#C17F3E;
-           padding:8px 18px;border-radius:6px;cursor:pointer;
-           font-size:14px;font-family:DM Sans,sans-serif;font-weight:500">
-    🎤 Speak Batch
-  </button>
-  <span id="vstatus"
-    style="margin-left:12px;font-size:13px;color:#8B6A45;font-family:DM Sans,sans-serif"></span>
-</div>
-<script>
-function startVoice() {
-  var btn = document.getElementById('vbtn');
-  var sta = document.getElementById('vstatus');
-  var SR  = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) { sta.textContent = '⚠ Use Chrome or Edge for voice input'; return; }
-  btn.disabled = true;
-  btn.textContent = '⏺ Listening…';
-  sta.textContent = '';
-  var r = new SR();
-  r.lang = 'en-IN';
-  r.continuous = false;
-  r.interimResults = false;
-  r.onresult = function(e) {
-    var text = e.results[0][0].transcript;
-    sta.textContent = '✓ ' + text;
-    var base = window.parent.location.href.split('?')[0];
-    window.parent.location.href = base + '?vt_prod=' + encodeURIComponent(text);
-  };
-  r.onerror = function(e) {
-    sta.textContent = '⚠ ' + (e.error === 'not-allowed' ? 'Microphone access denied' : e.error);
-    btn.disabled = false;
-    btn.textContent = '🎤 Speak Batch';
-  };
-  r.start();
-}
-</script>
-"""
-
-
 def _extract_production_from_voice(text: str):
     load_dotenv()
     api_key = os.getenv("GROQ_API_KEY")
@@ -295,7 +256,7 @@ def _extract_production_from_voice(text: str):
     try:
         client = Groq(api_key=api_key)
         resp = client.chat.completions.create(
-            model="llama-3.1-8b-instant",
+            model="openai/gpt-oss-20b",
             messages=[
                 {
                     "role": "system",
@@ -355,18 +316,6 @@ def render_production_page(conn):
         elif action == "del" and entry_id:
             st.session_state["confirm_del_prod_id"] = entry_id
         st.query_params.clear()
-        st.rerun()
-
-    if "vt_prod" in st.query_params:
-        _raw = st.query_params["vt_prod"]
-        st.query_params.clear()
-        with st.spinner("Processing voice input with AI..."):
-            _ext = _extract_production_from_voice(_raw)
-        if _ext:
-            st.session_state["voice_prod_prefill"] = _ext
-            st.session_state["voice_prod_raw"] = _raw
-        else:
-            st.session_state["voice_prod_error"] = True
         st.rerun()
 
     # ── Monthly summary ────────────────────────────────────────────────────────
@@ -616,8 +565,21 @@ def render_production_page(conn):
 
     # ── New entry ──────────────────────────────────────────────────────────────
     with st.expander("🎤 Voice Input — speak to auto-fill (optional)"):
-        components.html(_VOICE_JS_PROD, height=52)
+        audio_value = st.audio_input("🎤 Speak your production log")
         st.caption("Example: 'Batch B-001, 200 kg purple, 80 kg wax, 20 kg MC'")
+        if audio_value is not None:
+            _audio_hash = hash(audio_value.getvalue())
+            if _audio_hash != st.session_state.get("voice_prod_audio_hash"):
+                st.session_state["voice_prod_audio_hash"] = _audio_hash
+                with st.spinner("Processing voice input with AI..."):
+                    _raw = transcribe_audio(audio_value)
+                    _ext = _extract_production_from_voice(_raw) if _raw else None
+                if _ext:
+                    st.session_state["voice_prod_prefill"] = _ext
+                    st.session_state["voice_prod_raw"] = _raw
+                else:
+                    st.session_state["voice_prod_error"] = True
+                st.rerun()
         if st.session_state.get("voice_prod_error"):
             st.error("Could not extract details — fill the form manually.")
             st.session_state.pop("voice_prod_error", None)
@@ -937,8 +899,35 @@ def render_production_page(conn):
     if not logs:
         st.info("No entries match, adjust the filters above.")
     else:
+        # ── Download buttons for the currently filtered table (ALL matching rows) ──
+        _export_df = pd.DataFrame([dict(l) for l in logs])
+        _dl1, _dl2, _ = st.columns([1, 1, 4])
+        with _dl1:
+            st.download_button(
+                "⬇ Download as Excel",
+                data=export_to_excel(_export_df, "production_log.xlsx"),
+                file_name="production_log.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="dl_prod_xlsx",
+            )
+        with _dl2:
+            st.download_button(
+                "⬇ Download as PDF",
+                data=export_to_pdf(_export_df, "Production Log", "production_log.pdf"),
+                file_name="production_log.pdf",
+                mime="application/pdf",
+                key="dl_prod_pdf",
+            )
+
+        # ── Top 10 most recent by default (query is already date DESC, created_at
+        # DESC), same filters; full history on demand ───────────────────────────
+        view_full = st.toggle("View full history", value=False, key="prod_view_full")
+        display_logs = logs if view_full else logs[:10]
+        if not view_full and len(logs) > 10:
+            st.caption(f"Showing the 10 most recent of {len(logs)} matching entries — toggle above for full history.")
+
         rows_html = ""
-        for lg in logs:
+        for lg in display_logs:
             alloc_count = conn.execute(
                 "SELECT COUNT(*) FROM batch_allocations WHERE batch_id = ?", (lg["id"],)
             ).fetchone()[0]

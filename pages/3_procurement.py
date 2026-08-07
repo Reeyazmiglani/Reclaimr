@@ -1,12 +1,14 @@
 import os
 import json
 import streamlit as st
-import streamlit.components.v1 as components
+import pandas as pd
 from datetime import date
 from pathlib import Path
 from dotenv import load_dotenv
 from groq import Groq
 from db.schema import init_db
+from utils.voice import transcribe_audio
+from utils.export import export_to_excel, export_to_pdf
 
 
 @st.cache_resource
@@ -91,47 +93,6 @@ TABLE_CSS = (
 )
 
 
-_VOICE_JS_PROC = """
-<div style="margin:0;padding:4px 0">
-  <button id="vbtn" onclick="startVoice()"
-    style="background:#1A1410;border:1px solid #C17F3E;color:#C17F3E;
-           padding:8px 18px;border-radius:6px;cursor:pointer;
-           font-size:14px;font-family:DM Sans,sans-serif;font-weight:500">
-    🎤 Speak Purchase
-  </button>
-  <span id="vstatus"
-    style="margin-left:12px;font-size:13px;color:#8B6A45;font-family:DM Sans,sans-serif"></span>
-</div>
-<script>
-function startVoice() {
-  var btn = document.getElementById('vbtn');
-  var sta = document.getElementById('vstatus');
-  var SR  = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) { sta.textContent = '⚠ Use Chrome or Edge for voice input'; return; }
-  btn.disabled = true;
-  btn.textContent = '⏺ Listening…';
-  sta.textContent = '';
-  var r = new SR();
-  r.lang = 'en-IN';
-  r.continuous = false;
-  r.interimResults = false;
-  r.onresult = function(e) {
-    var text = e.results[0][0].transcript;
-    sta.textContent = '✓ ' + text;
-    var base = window.parent.location.href.split('?')[0];
-    window.parent.location.href = base + '?vt_proc=' + encodeURIComponent(text);
-  };
-  r.onerror = function(e) {
-    sta.textContent = '⚠ ' + (e.error === 'not-allowed' ? 'Microphone access denied' : e.error);
-    btn.disabled = false;
-    btn.textContent = '🎤 Speak Purchase';
-  };
-  r.start();
-}
-</script>
-"""
-
-
 def _extract_procurement_from_voice(text: str):
     load_dotenv()
     api_key = os.getenv("GROQ_API_KEY")
@@ -140,7 +101,7 @@ def _extract_procurement_from_voice(text: str):
     try:
         client = Groq(api_key=api_key)
         resp = client.chat.completions.create(
-            model="llama-3.1-8b-instant",
+            model="openai/gpt-oss-20b",
             messages=[
                 {
                     "role": "system",
@@ -200,18 +161,6 @@ def render_procurement_page(conn):
         elif action == "del" and entry_id:
             st.session_state["confirm_del_proc_id"] = entry_id
         st.query_params.clear()
-        st.rerun()
-
-    if "vt_proc" in st.query_params:
-        _raw = st.query_params["vt_proc"]
-        st.query_params.clear()
-        with st.spinner("Processing voice input with AI..."):
-            _ext = _extract_procurement_from_voice(_raw)
-        if _ext:
-            st.session_state["voice_proc_prefill"] = _ext
-            st.session_state["voice_proc_raw"] = _raw
-        else:
-            st.session_state["voice_proc_error"] = True
         st.rerun()
 
     # ── Edit form ──────────────────────────────────────────────────────────────
@@ -279,8 +228,21 @@ def render_procurement_page(conn):
 
     # ── New entry form ─────────────────────────────────────────────────────────
     with st.expander("🎤 Voice Input — speak to auto-fill (optional)"):
-        components.html(_VOICE_JS_PROC, height=52)
+        audio_value = st.audio_input("🎤 Speak your purchase")
         st.caption("Example: 'Bought 50 kg pine tar from Sharma at 200 per kg'")
+        if audio_value is not None:
+            _audio_hash = hash(audio_value.getvalue())
+            if _audio_hash != st.session_state.get("voice_proc_audio_hash"):
+                st.session_state["voice_proc_audio_hash"] = _audio_hash
+                with st.spinner("Processing voice input with AI..."):
+                    _raw = transcribe_audio(audio_value)
+                    _ext = _extract_procurement_from_voice(_raw) if _raw else None
+                if _ext:
+                    st.session_state["voice_proc_prefill"] = _ext
+                    st.session_state["voice_proc_raw"] = _raw
+                else:
+                    st.session_state["voice_proc_error"] = True
+                st.rerun()
         if st.session_state.get("voice_proc_error"):
             st.error("Could not extract details — fill the form manually.")
             st.session_state.pop("voice_proc_error", None)
@@ -388,6 +350,33 @@ def render_procurement_page(conn):
         st.info("No records match, adjust the filters above.")
         return
 
+    # ── Download buttons for the currently filtered table (ALL matching rows) ───
+    _export_df = pd.DataFrame([dict(e) for e in entries])
+    _dl1, _dl2, _ = st.columns([1, 1, 4])
+    with _dl1:
+        st.download_button(
+            "⬇ Download as Excel",
+            data=export_to_excel(_export_df, "procurement.xlsx"),
+            file_name="procurement.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            key="dl_proc_xlsx",
+        )
+    with _dl2:
+        st.download_button(
+            "⬇ Download as PDF",
+            data=export_to_pdf(_export_df, "Purchase Records", "procurement.pdf"),
+            file_name="procurement.pdf",
+            mime="application/pdf",
+            key="dl_proc_pdf",
+        )
+
+    # ── Top 10 most recent by default (query is already purchase_date DESC),
+    # same filters; full history on demand ────────────────────────────────────
+    view_full = st.toggle("View full history", value=False, key="proc_view_full")
+    display_entries = entries if view_full else entries[:10]
+    if not view_full and len(entries) > 10:
+        st.caption(f"Showing the 10 most recent of {len(entries)} matching records — toggle above for full history.")
+
     rows_html = "".join(
         f"<tr><td>{e['id']}</td><td>{e['supplier'] or '—'}</td><td>{e['item']}</td>"
         f"<td>{e['quantity']} {e['quantity_unit']}</td>"
@@ -396,7 +385,7 @@ def render_procurement_page(conn):
         f"<td>{e['purchase_date']}</td><td>{e['notes'] or '—'}</td>"
         f"<td><a href='#' onclick=\"window.top.location='?page=Procurement&p_action=edit&p_id={e['id']}';return false;\" class='act-btn'>Edit</a>"
         f"<a href='#' onclick=\"window.top.location='?page=Procurement&p_action=del&p_id={e['id']}';return false;\" class='act-btn del'>Del</a></td></tr>"
-        for e in entries
+        for e in display_entries
     )
     st.markdown(
         TABLE_CSS

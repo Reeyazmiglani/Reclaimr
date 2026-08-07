@@ -1,10 +1,12 @@
 import streamlit as st
 import plotly.graph_objects as go
+import pandas as pd
 from datetime import date
 import json
 import os
 import re
 from dotenv import load_dotenv
+from utils.export import export_to_excel, export_to_pdf
 
 load_dotenv()
 
@@ -678,6 +680,29 @@ def _tab_monthly(conn, company: str, kp: str) -> None:
     if not rows:
         st.info("No monthly updates yet, enter your first update above.")
         return
+
+    # ── Download buttons for the currently visible table ────────────────────────
+    _export_df = pd.DataFrame([dict(r) for r in rows]).rename(columns={
+        "month": "Month", "rwox_sales": "Rwox Sales", "elastohorse_sales": "Elastohorse Sales",
+        "rwox_cash": "Rwox Cash", "elastohorse_cash": "Elastohorse Cash",
+    })
+    _dl1, _dl2, _ = st.columns([1, 1, 4])
+    with _dl1:
+        st.download_button(
+            "⬇ Download as Excel",
+            data=export_to_excel(_export_df, "monthly_update.xlsx"),
+            file_name="monthly_update.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            key=f"{kp}_dl_fin_xlsx",
+        )
+    with _dl2:
+        st.download_button(
+            "⬇ Download as PDF",
+            data=export_to_pdf(_export_df, "Monthly Update — Last 6 Months", "monthly_update.pdf"),
+            file_name="monthly_update.pdf",
+            mime="application/pdf",
+            key=f"{kp}_dl_fin_pdf",
+        )
 
     st.divider()
     st.markdown("#### Last 6 Months: Revenue Trend")

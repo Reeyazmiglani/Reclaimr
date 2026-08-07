@@ -1,12 +1,15 @@
 import os
 import json
 import streamlit as st
-import streamlit.components.v1 as components
+import pandas as pd
 from datetime import date, datetime
 from pathlib import Path
 from dotenv import load_dotenv
 from groq import Groq
 from db.schema import init_db
+from utils.voice import transcribe_audio
+from utils.export import export_to_excel, export_to_pdf, generate_dispatch_note
+from utils.settings import get_company_details
 
 
 @st.cache_resource
@@ -111,47 +114,6 @@ _DARK_CSS = (
 )
 
 
-_VOICE_JS = """
-<div style="margin:0;padding:2px 0">
-  <button id="vbtn" onclick="startVoice()"
-    style="background:transparent;border:1px solid #C17F3E;color:#C17F3E;
-           padding:5px 14px;border-radius:6px;cursor:pointer;
-           font-size:13px;font-family:DM Sans,sans-serif">
-    🎤 Speak Order
-  </button>
-  <span id="vstatus"
-    style="margin-left:10px;font-size:12px;color:#8B6A45;font-family:DM Sans,sans-serif"></span>
-</div>
-<script>
-function startVoice() {
-  var btn = document.getElementById('vbtn');
-  var sta = document.getElementById('vstatus');
-  var SR  = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) { sta.textContent = '⚠ Use Chrome or Edge for voice input'; return; }
-  btn.disabled = true;
-  btn.textContent = '⏺ Listening…';
-  sta.textContent = '';
-  var r = new SR();
-  r.lang = 'en-IN';
-  r.continuous = false;
-  r.interimResults = false;
-  r.onresult = function(e) {
-    var text = e.results[0][0].transcript;
-    sta.textContent = '✓ ' + text;
-    var base = window.parent.location.href.split('?')[0];
-    window.parent.location.href = base + '?vt=' + encodeURIComponent(text);
-  };
-  r.onerror = function(e) {
-    sta.textContent = '⚠ ' + (e.error === 'not-allowed' ? 'Microphone access denied' : e.error);
-    btn.disabled = false;
-    btn.textContent = '🎤 Speak Order';
-  };
-  r.start();
-}
-</script>
-"""
-
-
 def _extract_order_from_voice(text: str):
     load_dotenv()
     api_key = os.getenv("GROQ_API_KEY")
@@ -160,7 +122,7 @@ def _extract_order_from_voice(text: str):
     try:
         client = Groq(api_key=api_key)
         resp = client.chat.completions.create(
-            model="llama-3.1-8b-instant",
+            model="openai/gpt-oss-20b",
             messages=[
                 {
                     "role": "system",
@@ -225,19 +187,6 @@ def render_orders_page(conn):
             conn.execute("UPDATE orders SET status='dispatched' WHERE id=?", (order_id,))
             conn.commit()
         st.query_params.clear()
-        st.rerun()
-
-    # ── Voice transcript from JS component ───────────────────────────────────────
-    if "vt" in st.query_params:
-        _raw = st.query_params["vt"]
-        st.query_params.clear()
-        with st.spinner("Processing voice input with AI..."):
-            _extracted = _extract_order_from_voice(_raw)
-        if _extracted:
-            st.session_state["voice_prefill"] = _extracted
-            st.session_state["voice_raw"] = _raw
-        else:
-            st.session_state["voice_error"] = True
         st.rerun()
 
     # ── Edit form ────────────────────────────────────────────────────────────────
@@ -371,7 +320,20 @@ def render_orders_page(conn):
     batch_opts = ["(Not assigned)"] + b_labels + ["Not yet produced / Enter manually"]
 
     # ── Optional voice input ─────────────────────────────────────────────────────
-    components.html(_VOICE_JS, height=40)
+    audio_value = st.audio_input("🎤 Speak your order")
+    if audio_value is not None:
+        _audio_hash = hash(audio_value.getvalue())
+        if _audio_hash != st.session_state.get("voice_audio_hash"):
+            st.session_state["voice_audio_hash"] = _audio_hash
+            with st.spinner("Processing voice input with AI..."):
+                _raw = transcribe_audio(audio_value)
+                _extracted = _extract_order_from_voice(_raw) if _raw else None
+            if _extracted:
+                st.session_state["voice_prefill"] = _extracted
+                st.session_state["voice_raw"] = _raw
+            else:
+                st.session_state["voice_error"] = True
+            st.rerun()
 
     if st.session_state.get("voice_error"):
         st.error("Could not extract order details — please try again or fill the form manually.")
@@ -519,7 +481,7 @@ def render_orders_page(conn):
     sql = (
         "SELECT o.id, c.name AS company, o.customer_name, o.product, "
         "o.quantity, o.quantity_unit, o.rate, o.rate_type, o.expected_dispatch_date, "
-        "o.batch_reference, o.status "
+        "o.batch_reference, o.status, o.created_at "
         "FROM orders o JOIN companies c ON o.company_id = c.id WHERE 1=1"
     )
     qp = []
@@ -546,6 +508,35 @@ def render_orders_page(conn):
         if len(orders) < total:
             st.caption(f"Showing {len(orders)} of {total} orders, some filtered out")
 
+        # ── Download buttons for the currently filtered/visible table ───────────
+        _export_df = pd.DataFrame([dict(o) for o in orders]).drop(columns=["created_at"])
+        _dl1, _dl2, _ = st.columns([1, 1, 4])
+        with _dl1:
+            st.download_button(
+                "⬇ Download as Excel",
+                data=export_to_excel(_export_df, "orders.xlsx"),
+                file_name="orders.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="dl_orders_xlsx",
+            )
+        with _dl2:
+            st.download_button(
+                "⬇ Download as PDF",
+                data=export_to_pdf(_export_df, "Order Register", "orders.pdf"),
+                file_name="orders.pdf",
+                mime="application/pdf",
+                key="dl_orders_pdf",
+            )
+
+        # ── Top 10 most recent by default, same filters; full history on demand ──
+        view_full = st.toggle("View full history", value=False, key="orders_view_full")
+        if view_full:
+            display_orders = orders
+        else:
+            display_orders = sorted(orders, key=lambda o: o["created_at"] or "", reverse=True)[:10]
+            if len(orders) > 10:
+                st.caption(f"Showing the 10 most recent of {len(orders)} matching orders — toggle above for full history.")
+
         show_batch = st.toggle("Show batch column", value=False, key="show_batch_col")
         if show_batch:
             _cols_use = _COLS
@@ -570,7 +561,7 @@ def render_orders_page(conn):
         st.markdown("<div style='border-bottom:2px solid #C17F3E;margin:2px 0 4px'></div>",
                     unsafe_allow_html=True)
 
-        for o in orders:
+        for o in display_orders:
             overdue = (o["expected_dispatch_date"] < today_str
                        and o["status"] not in ("dispatched", "cancelled"))
             cell = f"color:#C0392B;font-size:14px;padding-top:8px" if overdue else f"color:{_txt};font-size:14px;padding-top:8px"
@@ -617,6 +608,28 @@ def render_orders_page(conn):
                 conn.execute("UPDATE orders SET status=? WHERE id=?", (new_status, o["id"]))
                 conn.commit()
                 st.rerun()
+
+            if o["status"] in ("dispatched", "ready"):
+                dn_col, _ = st.columns([1.5, 8.5])
+                with dn_col:
+                    _co_details = get_company_details(conn).get(o["company"], {})
+                    _note = generate_dispatch_note({
+                        "id": o["id"], "company": o["company"], "customer_name": o["customer_name"],
+                        "product": o["product"], "quantity": o["quantity"], "quantity_unit": o["quantity_unit"],
+                        "rate": o["rate"], "rate_type": o["rate_type"],
+                        "order_date": (o["created_at"] or "")[:10],
+                        "expected_dispatch_date": o["expected_dispatch_date"],
+                        "actual_dispatch_date": o["expected_dispatch_date"] if o["status"] == "dispatched" else None,
+                        "batch_reference": o["batch_reference"],
+                        "company_address": _co_details.get("address") or None,
+                        "company_gstin": _co_details.get("gstin") or None,
+                        "company_contact": _co_details.get("contact") or None,
+                    })
+                    st.download_button(
+                        "📄 Dispatch Note", data=_note,
+                        file_name=f"dispatch_note_order_{o['id']}.pdf", mime="application/pdf",
+                        key=f"dn_{o['id']}", use_container_width=True,
+                    )
 
             st.markdown(
                 f"<div style='border-bottom:1px solid {_div_border};margin:2px 0'></div>",

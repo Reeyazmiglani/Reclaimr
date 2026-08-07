@@ -5,8 +5,32 @@ import pandas as pd
 from datetime import date, timedelta
 from pathlib import Path
 from db.schema import init_db
+from utils.settings import get_dark_mode, set_dark_mode
 
 st.set_page_config(page_title="Reclaimr", layout="wide")
+
+
+@st.cache_resource
+def get_conn():
+    return init_db(Path("db") / "erp.db")
+
+
+conn = get_conn()
+
+# Dark mode: default from the saved setting on first load, then keep the
+# sidebar toggle and the settings table in sync on every change.
+#
+# The sidebar toggle below owns session_state["dark_mode"] as its widget key,
+# so once it's instantiated this run, nothing else may assign to that key
+# directly (Streamlit forbids it). The Settings page therefore can't write
+# session_state["dark_mode"] itself when the user flips its own toggle there
+# — instead it drops the new value in "_dark_mode_sync" and reruns; this
+# block (which runs BEFORE the sidebar widget exists each run) picks it up
+# and applies it to the real key while it's still safe to do so.
+if "dark_mode" not in st.session_state:
+    st.session_state["dark_mode"] = get_dark_mode(conn)
+if "_dark_mode_sync" in st.session_state:
+    st.session_state["dark_mode"] = st.session_state.pop("_dark_mode_sync")
 
 _FONT   = ("@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600&display=swap');"
            "@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=block');")
@@ -104,7 +128,11 @@ _dark = st.session_state.get("dark_mode", False)
 st.markdown(_DARK_CSS if _dark else _LIGHT_CSS, unsafe_allow_html=True)
 
 # ── Navigation ─────────────────────────────────────────────────────────────────
-PAGE_KEYS  = ["Home","Overview","Orders","Production","Procurement","Exports","Credit","Financials","Forecasting"]
+# Settings isn't in the main sidebar list — it's reached via the small gear
+# icon in the top-right corner instead (see below), to keep the primary nav
+# focused on day-to-day pages.
+NAV_KEYS   = ["Home","Overview","Orders","Production","Procurement","Inventory","Exports","Credit","Financials","Forecasting"]
+PAGE_KEYS  = NAV_KEYS + ["Settings"]
 PAGE_FILES = {"Overview":Path("pages")/"0_overview.py",
               "Orders":Path("pages")/"1_orders.py",
               "Production":Path("pages")/"2_production.py",
@@ -112,33 +140,56 @@ PAGE_FILES = {"Overview":Path("pages")/"0_overview.py",
               "Exports":Path("pages")/"4_exports.py",
               "Credit":Path("pages")/"5_credit.py",
               "Financials":Path("pages")/"6_financials.py",
-              "Forecasting":Path("pages")/"7_forecasting.py"}
+              "Forecasting":Path("pages")/"7_forecasting.py",
+              "Inventory":Path("pages")/"8_inventory.py",
+              "Settings":Path("pages")/"9_settings.py"}
 PAGE_FN    = {"Overview":"render_intelligence_page",
               "Orders":"render_orders_page","Procurement":"render_procurement_page",
               "Production":"render_production_page","Exports":"render_exports_page",
               "Financials":"render_financials_page","Forecasting":"render_forecasting_page",
-              "Credit":"render_credit_page"}
-
-@st.cache_resource
-def get_conn():
-    return init_db(Path("db") / "erp.db")
-
-conn = get_conn()
+              "Credit":"render_credit_page","Inventory":"render_inventory_page",
+              "Settings":"render_settings_page"}
 
 if "page" in st.query_params:
     req = st.query_params["page"]
-    if req in PAGE_KEYS: st.session_state["_page"] = req
+    if req in PAGE_KEYS:
+        if req == "Settings":
+            st.session_state["_settings_active"] = True
+        else:
+            st.session_state["_settings_active"] = False
+            st.session_state["nav_radio_choice"] = req
     del st.query_params["page"]
 
+
+def _leave_settings():
+    st.session_state["_settings_active"] = False
+
+
 st.sidebar.markdown(_LOGO_HTML, unsafe_allow_html=True)
-page = st.sidebar.radio("", PAGE_KEYS,
-       index=PAGE_KEYS.index(st.session_state.get("_page","Home")))
+_nav_default = st.session_state.get("nav_radio_choice", "Home")
+if _nav_default not in NAV_KEYS:
+    _nav_default = "Home"
+nav_choice = st.sidebar.radio("", NAV_KEYS, index=NAV_KEYS.index(_nav_default),
+                               key="nav_radio_choice", on_change=_leave_settings)
 st.sidebar.text_input("🔍 Search", placeholder="Search...")
-st.session_state["_page"] = page
+
+# ── Corner: gear icon (Settings) + profile chip ─────────────────────────────────
+_top_l, _top_gear, _top_profile = st.columns([0.68, 0.08, 0.24])
+with _top_gear:
+    if st.button("⚙", key="open_settings", help="Settings"):
+        st.session_state["_settings_active"] = True
+        st.rerun()
+with _top_profile:
+    st.caption("🧑 Admin")
 
 _, _dm_col = st.columns([0.75, 0.25])
 with _dm_col:
-    st.toggle("🌙 Dark mode", key="dark_mode", value=st.session_state.get("dark_mode", False))
+    _dm_new = st.toggle("🌙 Dark mode", key="dark_mode", value=st.session_state.get("dark_mode", False))
+if _dm_new != get_dark_mode(conn):
+    set_dark_mode(conn, _dm_new)
+
+page = "Settings" if st.session_state.get("_settings_active") else nav_choice
+st.session_state["_page"] = page
 
 if page != "Home":
     path = PAGE_FILES[page]; spec = importlib.util.spec_from_file_location(path.stem, path)

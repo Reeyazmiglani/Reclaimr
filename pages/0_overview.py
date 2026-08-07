@@ -4,6 +4,7 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from dotenv import load_dotenv
 from db.schema import init_db
+from utils.settings import get_overdue_days
 
 load_dotenv()
 
@@ -165,6 +166,7 @@ def _ensure_tables(conn):
 def _build_ai_context(conn):
     today = date.today().isoformat()
     this_month = date.today().strftime("%Y-%m")
+    overdue_days = get_overdue_days(conn)
 
     orders_row = conn.execute("""
         SELECT COUNT(*) as total,
@@ -189,8 +191,8 @@ def _build_ai_context(conn):
             WHERE type='receivable' GROUP BY reference_id
         ) px ON px.reference_id = r.id
         WHERE r.status != 'paid'
-        AND CAST(julianday('now','localtime') - julianday(r.date) AS INTEGER) > 45
-    """).fetchone()
+        AND CAST(julianday('now','localtime') - julianday(r.date) AS INTEGER) > ?
+    """, (overdue_days,)).fetchone()
 
     complaints = conn.execute(
         "SELECT COUNT(*) FROM batch_complaints WHERE status != 'resolved'"
@@ -296,6 +298,7 @@ def render_intelligence_page(conn):
     today = date.today()
     now_str = datetime.now().strftime("%H:%M")
     this_month = today.strftime("%Y-%m")
+    overdue_days = get_overdue_days(conn)
 
     # ── Live counts for header & metrics ──────────────────────────────────────
     due_today_overdue = conn.execute(
@@ -312,8 +315,8 @@ def render_intelligence_page(conn):
             WHERE type='receivable' GROUP BY reference_id
         ) px ON px.reference_id = r.id
         WHERE r.status != 'paid'
-        AND CAST(julianday('now','localtime') - julianday(r.date) AS INTEGER) > 45
-    """).fetchone()
+        AND CAST(julianday('now','localtime') - julianday(r.date) AS INTEGER) > ?
+    """, (overdue_days,)).fetchone()
     overdue_rec_count  = overdue_rec_row["cnt"]
     overdue_rec_amount = overdue_rec_row["total"]
 
@@ -329,8 +332,8 @@ def render_intelligence_page(conn):
     overdue_pay_count = conn.execute("""
         SELECT COUNT(*) FROM payables p
         WHERE p.status != 'paid'
-        AND CAST(julianday('now','localtime') - julianday(p.date) AS INTEGER) > 45
-    """).fetchone()[0]
+        AND CAST(julianday('now','localtime') - julianday(p.date) AS INTEGER) > ?
+    """, (overdue_days,)).fetchone()[0]
 
     total_issues = (due_today_overdue + overdue_rec_count + open_complaints
                     + stagnant_count + overdue_pay_count)
@@ -479,9 +482,9 @@ def render_intelligence_page(conn):
         FROM receivables r
         LEFT JOIN payments p ON p.type='receivable' AND p.reference_id=r.id
         WHERE r.status != 'paid'
-        GROUP BY r.id HAVING days > 45
+        GROUP BY r.id HAVING days > ?
         ORDER BY days DESC
-    """).fetchall():
+    """, (overdue_days,)).fetchall():
         actions.append((r["days"], "💰", _RED,
             f"Chase payment from <b>{r['customer_name']}</b>, "
             f"{_inr(r['balance'])} outstanding for "

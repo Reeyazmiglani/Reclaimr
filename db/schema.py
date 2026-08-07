@@ -199,6 +199,23 @@ def create_tables(conn: sqlite3.Connection) -> None:
             FOREIGN KEY (from_company_id) REFERENCES companies(id),
             FOREIGN KEY (to_company_id) REFERENCES companies(id)
         );
+
+        CREATE TABLE IF NOT EXISTS stock_adjustments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            date TEXT NOT NULL,
+            company_id INTEGER NOT NULL,
+            item_type TEXT NOT NULL,
+            item_name TEXT NOT NULL,
+            adjustment_qty REAL NOT NULL,
+            reason TEXT,
+            created_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+            FOREIGN KEY (company_id) REFERENCES companies(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS settings (
+            key TEXT PRIMARY KEY,
+            value TEXT
+        );
         """
     )
 
