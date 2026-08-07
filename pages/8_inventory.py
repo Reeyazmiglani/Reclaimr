@@ -5,6 +5,7 @@ from datetime import date
 from pathlib import Path
 from db.schema import init_db
 from utils.settings import get_stock_thresholds, set_stock_thresholds, DEFAULT_STOCK_THRESHOLDS
+from utils.auth import require_auth, render_logout_button
 
 DB_PATH = os.getenv("DB_PATH", "db/erp.db")
 
@@ -13,6 +14,9 @@ DB_PATH = os.getenv("DB_PATH", "db/erp.db")
 def _get_conn():
     return init_db(Path(DB_PATH))
 
+
+require_auth(_get_conn())
+render_logout_button()
 
 _GREEN  = "#1B7F4F"
 _YELLOW = "#D97706"

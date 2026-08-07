@@ -3,6 +3,7 @@ import streamlit as st
 from datetime import date
 from pathlib import Path
 from db.schema import init_db
+from utils.auth import require_auth, render_logout_button
 
 DB_PATH = os.getenv("DB_PATH", "db/erp.db")
 
@@ -11,6 +12,9 @@ DB_PATH = os.getenv("DB_PATH", "db/erp.db")
 def _get_conn():
     return init_db(Path(DB_PATH))
 
+
+require_auth(_get_conn())
+render_logout_button()
 
 COMPANIES      = ["Rwox", "Elastohorse"]
 UNITS          = ["kg", "tonnes", "litres", "bags", "cartons"]

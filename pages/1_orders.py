@@ -10,6 +10,7 @@ from db.schema import init_db
 from utils.voice import transcribe_audio
 from utils.export import export_to_excel, export_to_pdf, generate_dispatch_note
 from utils.settings import get_company_details
+from utils.auth import require_auth, render_logout_button
 
 
 DB_PATH = os.getenv("DB_PATH", "db/erp.db")
@@ -18,6 +19,10 @@ DB_PATH = os.getenv("DB_PATH", "db/erp.db")
 @st.cache_resource
 def _get_conn():
     return init_db(Path(DB_PATH))
+
+
+require_auth(_get_conn())
+render_logout_button()
 
 COMPANIES = ["Rwox", "Elastohorse"]
 ORDER_STATUSES = ["received", "in_production", "ready", "dispatched", "cancelled"]

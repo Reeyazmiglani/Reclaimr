@@ -13,6 +13,10 @@ from utils.settings import (
     get_stock_thresholds, set_stock_thresholds,
     get_company_details, set_company_details,
 )
+from utils.auth import (
+    require_auth, render_logout_button,
+    get_pending_users, get_all_users, approve_user, remove_user,
+)
 
 load_dotenv()
 
@@ -22,6 +26,10 @@ DB_PATH = os.getenv("DB_PATH", "db/erp.db")
 @st.cache_resource
 def _get_conn():
     return init_db(Path(DB_PATH))
+
+
+require_auth(_get_conn())
+render_logout_button()
 
 
 _GREEN  = "#1B7F4F"
@@ -92,7 +100,43 @@ COMPANIES = ["Rwox", "Elastohorse"]
 def render_settings_page(conn):
     st.markdown(_DARK_CSS if st.session_state.get("dark_mode") else _WARM_CSS, unsafe_allow_html=True)
     st.header("Settings")
-    st.caption("One shared set of app-wide settings — there's no per-user login yet, so these apply to everyone using this installation.")
+    st.caption("Most settings below are shared app-wide; the Team & Access section is per-account.")
+
+    user = st.session_state.get("auth_user", {})
+
+    # ══════════════════════════════════════════════════════════════════════
+    # 0 — TEAM & ACCESS (owner only)
+    # ══════════════════════════════════════════════════════════════════════
+    if user.get("role") == "owner":
+        st.subheader("Team & Access")
+        pending = get_pending_users(conn)
+        if pending:
+            st.markdown(f"**{len(pending)} pending {'request' if len(pending)==1 else 'requests'}**")
+            for p in pending:
+                pc1, pc2, pc3 = st.columns([3, 1, 1])
+                pc1.write(f"{p['name']} (`{p['username']}`) — requested {p['created_at']}")
+                if pc2.button("✅ Approve", key=f"approve_{p['id']}"):
+                    approve_user(conn, p["id"])
+                    st.success(f"Approved {p['name']}.")
+                    st.rerun()
+                if pc3.button("🗑 Reject", key=f"reject_{p['id']}"):
+                    remove_user(conn, p["id"])
+                    st.info(f"Rejected {p['name']}.")
+                    st.rerun()
+        else:
+            st.caption("No pending signup requests.")
+
+        with st.expander("All accounts"):
+            for u in get_all_users(conn):
+                uc1, uc2, uc3 = st.columns([3, 1, 1])
+                uc1.write(f"{u['name']} (`{u['username']}`) — {u['role']}"
+                          + ("" if u["approved"] else " · pending"))
+                uc2.write("")
+                if u["role"] != "owner" and uc3.button("🗑 Remove", key=f"remove_{u['id']}"):
+                    remove_user(conn, u["id"])
+                    st.rerun()
+
+        st.divider()
 
     # ══════════════════════════════════════════════════════════════════════
     # 1 — APPEARANCE

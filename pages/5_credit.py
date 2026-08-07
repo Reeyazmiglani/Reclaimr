@@ -4,6 +4,7 @@ from datetime import date, datetime
 from pathlib import Path
 from db.schema import init_db
 from utils.settings import get_overdue_days
+from utils.auth import require_auth, render_logout_button
 
 DB_PATH = os.getenv("DB_PATH", "db/erp.db")
 
@@ -12,6 +13,9 @@ DB_PATH = os.getenv("DB_PATH", "db/erp.db")
 def _get_conn():
     return init_db(Path(DB_PATH))
 
+
+require_auth(_get_conn())
+render_logout_button()
 
 COMPANIES = ["Rwox", "Elastohorse"]
 OVERDUE_DAYS = 45  # default; overwritten from the Settings page's saved value on each render

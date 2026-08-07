@@ -7,6 +7,7 @@ from datetime import date, timedelta
 from pathlib import Path
 from db.schema import init_db
 from utils.settings import get_dark_mode, set_dark_mode
+from utils.auth import require_auth, render_login_signup, render_logout_button
 
 st.set_page_config(page_title="Reclaimr", layout="wide")
 
@@ -19,6 +20,11 @@ def get_conn():
 
 
 conn = get_conn()
+
+if "auth_user" not in st.session_state:
+    render_login_signup(conn)
+    st.stop()
+current_user = require_auth(conn)
 
 # Dark mode: default from the saved setting on first load, then keep the
 # sidebar toggle and the settings table in sync on every change.
@@ -183,7 +189,7 @@ with _top_gear:
         st.session_state["_settings_active"] = True
         st.rerun()
 with _top_profile:
-    st.caption("🧑 Admin")
+    st.caption(f"🧑 {current_user['name']}")
 
 _, _dm_col = st.columns([0.75, 0.25])
 with _dm_col:
@@ -195,9 +201,14 @@ page = "Settings" if st.session_state.get("_settings_active") else nav_choice
 st.session_state["_page"] = page
 
 if page != "Home":
+    # The target page module renders its own sidebar logout button at
+    # import time (it must, so direct-URL navigation to it — bypassing
+    # app.py entirely — still shows one); don't render a second one here.
     path = PAGE_FILES[page]; spec = importlib.util.spec_from_file_location(path.stem, path)
     mod = importlib.util.module_from_spec(spec); spec.loader.exec_module(mod)
     getattr(mod, PAGE_FN[page])(conn); st.stop()
+
+render_logout_button()
 
 st.markdown(
     "<div style='text-align:center;padding:30px 0 20px 0'>"

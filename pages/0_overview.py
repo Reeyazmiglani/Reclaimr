@@ -5,6 +5,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from db.schema import init_db
 from utils.settings import get_overdue_days
+from utils.auth import require_auth, render_logout_button
 
 load_dotenv()
 
@@ -15,6 +16,10 @@ DB_PATH = os.getenv("DB_PATH", "db/erp.db")
 @st.cache_resource
 def _get_conn():
     return init_db(Path(DB_PATH))
+
+
+require_auth(_get_conn())
+render_logout_button()
 
 
 _GREEN  = "#1B7F4F"

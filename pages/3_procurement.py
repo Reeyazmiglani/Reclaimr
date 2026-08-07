@@ -9,6 +9,7 @@ from groq import Groq
 from db.schema import init_db
 from utils.voice import transcribe_audio
 from utils.export import export_to_excel, export_to_pdf
+from utils.auth import require_auth, render_logout_button
 
 
 DB_PATH = os.getenv("DB_PATH", "db/erp.db")
@@ -18,6 +19,9 @@ DB_PATH = os.getenv("DB_PATH", "db/erp.db")
 def _get_conn():
     return init_db(Path(DB_PATH))
 
+
+require_auth(_get_conn())
+render_logout_button()
 
 UNITS = ["kg", "tonnes", "litres", "bags"]
 PRICE_TYPE_OPTIONS = ["Price per unit", "Total Payment"]

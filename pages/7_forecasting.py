@@ -1,7 +1,22 @@
+import os
 import streamlit as st
 import plotly.graph_objects as go
 from datetime import date, timedelta
+from pathlib import Path
 import math
+from db.schema import init_db
+from utils.auth import require_auth, render_logout_button
+
+DB_PATH = os.getenv("DB_PATH", "db/erp.db")
+
+
+@st.cache_resource
+def _get_conn():
+    return init_db(Path(DB_PATH))
+
+
+require_auth(_get_conn())
+render_logout_button()
 
 # ─────────────────────────────────────────────────────────────────────────────
 # CONSTANTS
