@@ -49,7 +49,7 @@ if "_dark_mode_sync" in st.session_state:
 
 _FONT   = ("@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600&display=swap');"
            "@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=block');")
-_FONT_F = "* { font-family: 'DM Sans', sans-serif !important; }[class*='material-symbols'] { font-family: 'Material Symbols Rounded' !important; font-style: normal !important; }"
+_FONT_F = "* { font-family: 'DM Sans', sans-serif !important; }[class*='material-symbols'], [data-testid='stIconMaterial'] { font-family: 'Material Symbols Rounded' !important; font-style: normal !important; font-variation-settings: inherit; }"
 _LIGHT_CSS = (
     "<style>" + _FONT + _FONT_F +
     "[data-testid='stSidebarNav']{display:none!important}"
@@ -85,7 +85,7 @@ _DARK_CSS = (
     "h2,h3,h4{color:#F5E6D3!important}"
     "p,label,span{color:#F5E6D3!important}"
     "[data-testid='stSidebar'] *{color:#F5E6D3!important}"
-    "[class*='material-symbols']{color:inherit!important;font-family:'Material Symbols Rounded'!important;font-style:normal!important}"
+    "[class*='material-symbols'],[data-testid='stIconMaterial']{color:inherit!important;font-family:'Material Symbols Rounded'!important;font-style:normal!important}"
     "[data-testid='metric-container']{background:#2C2218!important;border:1px solid #4A3728!important;"
     "border-radius:10px;padding:14px 18px}"
     "[data-testid='stMetricValue']{color:#F5E6D3!important}"
