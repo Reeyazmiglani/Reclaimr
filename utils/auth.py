@@ -235,10 +235,25 @@ def restore_session(conn):
     return _sync_session_user(conn)
 
 
+_AUTH_DISABLED_USER = {
+    "id": 0, "name": "Reeyaz", "username": "reeyaz", "role": "owner", "approved": 1,
+}
+
+
 def require_auth(conn):
     """Call at module top level in every page. Restores a persistent session
     from the cookie if present, then blocks rendering and sends
-    unauthenticated / no-longer-approved visitors back to the login screen."""
+    unauthenticated / no-longer-approved visitors back to the login screen.
+
+    TEMPORARILY DISABLED (2026-08-08): login was breaking access after the
+    Postgres migration, so the gate is short-circuited here — every visitor
+    is treated as the owner, no login/signup required. All the real
+    logic above (restore_session, cookie handling, approval flow) is left
+    untouched; to re-enable, just delete this early-return block and the
+    _AUTH_DISABLED_USER sentinel above."""
+    st.session_state["auth_user"] = _AUTH_DISABLED_USER
+    return _AUTH_DISABLED_USER
+
     user = restore_session(conn)
     if not user:
         st.warning("🔒 Please log in to view this page.")

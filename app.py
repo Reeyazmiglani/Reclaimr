@@ -8,7 +8,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from db.schema import init_db
 from utils.settings import get_dark_mode, set_dark_mode
-from utils.auth import restore_session, render_login_signup, render_logout_button
+from utils.auth import restore_session, render_login_signup, render_logout_button, require_auth
 
 load_dotenv()
 
@@ -24,13 +24,15 @@ def get_conn():
 
 conn = get_conn()
 
-# Tries the persistent streamlit-authenticator cookie first (so reopening
-# the browser within the 30-day window skips the login screen entirely)
-# before falling back to the login/signup form.
-current_user = restore_session(conn)
-if not current_user:
-    render_login_signup(conn)
-    st.stop()
+# TEMPORARILY DISABLED (2026-08-08): using require_auth's bypass (see
+# utils/auth.py) instead of the real restore_session/render_login_signup
+# flow below, since login was broken after the Postgres migration. Revert
+# this to the commented-out block once auth is re-enabled.
+current_user = require_auth(conn)
+# current_user = restore_session(conn)
+# if not current_user:
+#     render_login_signup(conn)
+#     st.stop()
 
 # Dark mode: default from the saved setting on first load, then keep the
 # sidebar toggle and the settings table in sync on every change.
