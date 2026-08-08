@@ -38,13 +38,13 @@ def _ensure_users_table(conn):
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             name TEXT NOT NULL,
             username TEXT NOT NULL UNIQUE,
             password_hash TEXT NOT NULL,
             role TEXT NOT NULL DEFAULT 'member',
             approved INTEGER NOT NULL DEFAULT 0,
-            created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+            created_at TEXT NOT NULL DEFAULT to_char(now() AT TIME ZONE 'localtime', 'YYYY-MM-DD HH24:MI:SS')
         )
         """
     )
@@ -60,13 +60,13 @@ def create_user(conn, name: str, username: str, password: str):
     username = username.strip().lower()
     if not name.strip() or not username or not password:
         return False, "Fill in all fields."
-    if conn.execute("SELECT id FROM users WHERE username=?", (username,)).fetchone():
+    if conn.execute("SELECT id FROM users WHERE username=%s", (username,)).fetchone():
         return False, "That username is already taken."
     is_first = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0
     role = "owner" if is_first else "member"
     approved = 1 if is_first else 0
     conn.execute(
-        "INSERT INTO users (name, username, password_hash, role, approved) VALUES (?,?,?,?,?)",
+        "INSERT INTO users (name, username, password_hash, role, approved) VALUES (%s,%s,%s,%s,%s)",
         (name.strip(), username, hash_password(password), role, approved),
     )
     conn.commit()
@@ -90,12 +90,12 @@ def get_all_users(conn):
 
 
 def approve_user(conn, user_id: int):
-    conn.execute("UPDATE users SET approved=1 WHERE id=?", (user_id,))
+    conn.execute("UPDATE users SET approved=1 WHERE id=%s", (user_id,))
     conn.commit()
 
 
 def remove_user(conn, user_id: int):
-    conn.execute("DELETE FROM users WHERE id=?", (user_id,))
+    conn.execute("DELETE FROM users WHERE id=%s", (user_id,))
     conn.commit()
 
 
@@ -151,7 +151,7 @@ def _sync_session_user(conn):
     full row (id/role/approved) so the rest of the app can use it."""
     if st.session_state.get("authentication_status"):
         row = conn.execute(
-            "SELECT * FROM users WHERE username=? AND approved=1",
+            "SELECT * FROM users WHERE username=%s AND approved=1",
             (st.session_state.get("username"),),
         ).fetchone()
         if row:

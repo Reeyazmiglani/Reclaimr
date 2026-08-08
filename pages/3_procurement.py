@@ -12,12 +12,12 @@ from utils.export import export_to_excel, export_to_pdf
 from utils.auth import require_auth, render_logout_button
 
 
-DB_PATH = os.getenv("DB_PATH", "db/erp.db")
+DATABASE_URL = os.getenv("DATABASE_URL")
 
 
 @st.cache_resource
 def _get_conn():
-    return init_db(Path(DB_PATH))
+    return init_db(DATABASE_URL)
 
 
 require_auth(_get_conn())
@@ -174,7 +174,7 @@ def render_procurement_page(conn):
     editing_id = st.session_state.get("editing_proc_id")
     if editing_id:
         entry = conn.execute(
-            "SELECT * FROM procurement WHERE id = ?", (editing_id,)
+            "SELECT * FROM procurement WHERE id = %s", (editing_id,)
         ).fetchone()
 
         if entry:
@@ -217,8 +217,8 @@ def render_procurement_page(conn):
                     st.error("Vendor and material name are required.")
                 else:
                     conn.execute(
-                        "UPDATE procurement SET supplier=?, item=?, quantity=?, quantity_unit=?, "
-                        "unit_cost=?, price_type=?, purchase_date=?, notes=? WHERE id=?",
+                        "UPDATE procurement SET supplier=%s, item=%s, quantity=%s, quantity_unit=%s, "
+                        "unit_cost=%s, price_type=%s, purchase_date=%s, notes=%s WHERE id=%s",
                         (vendor.strip(), material.strip(), quantity, quantity_unit,
                          price, PRICE_TYPE_TO_DB[price_type_label],
                          purchase_date.isoformat(), notes.strip() or None, editing_id),
@@ -306,7 +306,7 @@ def render_procurement_page(conn):
         else:
             conn.execute(
                 "INSERT INTO procurement (company_id, supplier, item, quantity, quantity_unit, "
-                "unit_cost, price_type, purchase_date, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "unit_cost, price_type, purchase_date, notes) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
                 (company_id, vendor.strip(), material.strip(), quantity, quantity_unit,
                  price, PRICE_TYPE_TO_DB[price_type_label],
                  purchase_date.isoformat(), notes.strip() or None),
@@ -338,17 +338,17 @@ def render_procurement_page(conn):
 
     psql = (
         "SELECT id, supplier, item, quantity, quantity_unit, unit_cost, price_type, purchase_date, notes "
-        "FROM procurement WHERE company_id = ?"
+        "FROM procurement WHERE company_id = %s"
     )
     pqp = [company_id]
     if fp_vendor:
-        psql += " AND supplier LIKE ?"; pqp.append(f"%{fp_vendor}%")
+        psql += " AND supplier LIKE %s"; pqp.append(f"%{fp_vendor}%")
     if fp_material:
-        psql += " AND item LIKE ?"; pqp.append(f"%{fp_material}%")
+        psql += " AND item LIKE %s"; pqp.append(f"%{fp_material}%")
     if fp_from:
-        psql += " AND purchase_date >= ?"; pqp.append(fp_from.isoformat())
+        psql += " AND purchase_date >= %s"; pqp.append(fp_from.isoformat())
     if fp_to:
-        psql += " AND purchase_date <= ?"; pqp.append(fp_to.isoformat())
+        psql += " AND purchase_date <= %s"; pqp.append(fp_to.isoformat())
     psql += " ORDER BY purchase_date DESC"
 
     entries = conn.execute(psql, pqp).fetchall()
@@ -407,7 +407,7 @@ def render_procurement_page(conn):
     confirm_del_id = st.session_state.get("confirm_del_proc_id")
     if confirm_del_id:
         row = conn.execute(
-            "SELECT id, supplier, item FROM procurement WHERE id = ?", (confirm_del_id,)
+            "SELECT id, supplier, item FROM procurement WHERE id = %s", (confirm_del_id,)
         ).fetchone()
         if row:
             st.warning(
@@ -417,7 +417,7 @@ def render_procurement_page(conn):
             yes_col, no_col, _ = st.columns([1, 1, 8])
             with yes_col:
                 if st.button("Yes, delete", type="primary"):
-                    conn.execute("DELETE FROM procurement WHERE id = ?", (confirm_del_id,))
+                    conn.execute("DELETE FROM procurement WHERE id = %s", (confirm_del_id,))
                     conn.commit()
                     st.session_state["confirm_del_proc_id"] = None
                     st.rerun()
@@ -431,7 +431,7 @@ def render_procurement_page(conn):
     st.caption("Last 5 purchases per vendor. Use this to spot price drift before it hits your margins.")
     vendors = conn.execute(
         "SELECT DISTINCT supplier FROM procurement "
-        "WHERE company_id = ? AND supplier IS NOT NULL ORDER BY supplier",
+        "WHERE company_id = %s AND supplier IS NOT NULL ORDER BY supplier",
         (company_id,),
     ).fetchall()
 
@@ -439,7 +439,7 @@ def render_procurement_page(conn):
         vendor_name = vendor_row["supplier"]
         history = conn.execute(
             "SELECT item, quantity, quantity_unit, unit_cost, price_type, purchase_date "
-            "FROM procurement WHERE company_id = ? AND supplier = ? "
+            "FROM procurement WHERE company_id = %s AND supplier = %s "
             "ORDER BY purchase_date DESC LIMIT 5",
             (company_id, vendor_name),
         ).fetchall()

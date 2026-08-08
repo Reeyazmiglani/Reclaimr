@@ -8,12 +8,12 @@ from utils.auth import require_auth, render_logout_button
 
 load_dotenv()
 
-DB_PATH = os.getenv("DB_PATH", "db/erp.db")
+DATABASE_URL = os.getenv("DATABASE_URL")
 
 
 @st.cache_resource
 def _get_conn():
-    return init_db(Path(DB_PATH))
+    return init_db(DATABASE_URL)
 
 
 require_auth(_get_conn())
@@ -152,16 +152,16 @@ def render_exports_page(conn):
         elif action == "del" and eid:
             st.session_state["confirm_del_exp_id"] = eid
         elif action == "dispatch" and eid:
-            conn.execute("UPDATE exports SET status='dispatched' WHERE id=?", (eid,))
+            conn.execute("UPDATE exports SET status='dispatched' WHERE id=%s", (eid,))
             conn.commit()
         st.query_params.clear(); st.rerun()
 
     # ── Summary ────────────────────────────────────────────────────────────────
     rev_month  = conn.execute(
         "SELECT COALESCE(SUM(inr_equivalent),0) FROM exports "
-        "WHERE strftime('%Y-%m',order_date)=?", (this_month,)).fetchone()[0]
+        "WHERE to_char(order_date::date,'YYYY-MM')=%s", (this_month,)).fetchone()[0]
     ord_month  = conn.execute(
-        "SELECT COUNT(*) FROM exports WHERE strftime('%Y-%m',order_date)=?",
+        "SELECT COUNT(*) FROM exports WHERE to_char(order_date::date,'YYYY-MM')=%s",
         (this_month,)).fetchone()[0]
 
     sm1, sm2 = st.columns(2)
@@ -173,7 +173,7 @@ def render_exports_page(conn):
     with bc1:
         by_country = conn.execute(
             "SELECT country, COUNT(*) AS orders, SUM(inr_equivalent) AS rev "
-            "FROM exports WHERE strftime('%Y-%m',order_date)=? "
+            "FROM exports WHERE to_char(order_date::date,'YYYY-MM')=%s "
             "GROUP BY country ORDER BY rev DESC", (this_month,)).fetchall()
         if by_country:
             st.markdown("**By Country**")
@@ -188,7 +188,7 @@ def render_exports_page(conn):
     with bc2:
         by_curr = conn.execute(
             "SELECT currency, COUNT(*) AS orders, SUM(inr_equivalent) AS rev "
-            "FROM exports WHERE strftime('%Y-%m',order_date)=? "
+            "FROM exports WHERE to_char(order_date::date,'YYYY-MM')=%s "
             "GROUP BY currency ORDER BY rev DESC", (this_month,)).fetchall()
         if by_curr:
             st.markdown("**By Currency**")
@@ -207,7 +207,7 @@ def render_exports_page(conn):
     editing_id = st.session_state.get("editing_exp_id")
     if editing_id:
         entry = conn.execute("SELECT e.*, c.name AS company_name FROM exports e "
-                             "JOIN companies c ON e.company_id=c.id WHERE e.id=?",
+                             "JOIN companies c ON e.company_id=c.id WHERE e.id=%s",
                              (editing_id,)).fetchone()
         if entry:
             st.subheader(f"Editing Export #{editing_id}")
@@ -259,12 +259,12 @@ def render_exports_page(conn):
                 if not e_customer.strip() or not e_country.strip() or not e_product.strip():
                     st.error("Customer, country and product are required.")
                 else:
-                    co_row = conn.execute("SELECT id FROM companies WHERE name=?", (e_company,)).fetchone()
+                    co_row = conn.execute("SELECT id FROM companies WHERE name=%s", (e_company,)).fetchone()
                     conn.execute(
-                        "UPDATE exports SET company_id=?,customer_name=?,country=?,product=?,"
-                        "quantity=?,quantity_unit=?,pack_size=?,rate=?,rate_type=?,currency=?,"
-                        "exchange_rate=?,inr_equivalent=?,order_date=?,expected_dispatch_date=?,"
-                        "status=?,shipping_terms=?,notes=? WHERE id=?",
+                        "UPDATE exports SET company_id=%s,customer_name=%s,country=%s,product=%s,"
+                        "quantity=%s,quantity_unit=%s,pack_size=%s,rate=%s,rate_type=%s,currency=%s,"
+                        "exchange_rate=%s,inr_equivalent=%s,order_date=%s,expected_dispatch_date=%s,"
+                        "status=%s,shipping_terms=%s,notes=%s WHERE id=%s",
                         (co_row["id"], e_customer.strip(), e_country.strip(), e_product.strip(),
                          e_qty, e_unit, e_pack, e_rate,
                          "per_unit" if e_rt=="Per Unit" else "overall",
@@ -333,12 +333,12 @@ def render_exports_page(conn):
         elif rate == 0:
             st.error("Rate cannot be zero.")
         else:
-            co_row = conn.execute("SELECT id FROM companies WHERE name=?", (company,)).fetchone()
+            co_row = conn.execute("SELECT id FROM companies WHERE name=%s", (company,)).fetchone()
             conn.execute(
                 "INSERT INTO exports (company_id,customer_name,country,product,quantity,quantity_unit,"
                 "pack_size,rate,rate_type,currency,exchange_rate,inr_equivalent,order_date,"
                 "expected_dispatch_date,status,shipping_terms,notes) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
                 (co_row["id"], customer.strip(), country.strip(), product.strip(),
                  quantity, quantity_unit, pack_size, rate,
                  "per_unit" if rate_type=="Per Unit" else "overall",
@@ -387,17 +387,17 @@ def render_exports_page(conn):
     )
     eqp = []
     if fexp_customer:
-        esql += " AND e.customer_name LIKE ?"; eqp.append(f"%{fexp_customer}%")
+        esql += " AND e.customer_name LIKE %s"; eqp.append(f"%{fexp_customer}%")
     if fexp_country:
-        esql += " AND e.country LIKE ?"; eqp.append(f"%{fexp_country}%")
+        esql += " AND e.country LIKE %s"; eqp.append(f"%{fexp_country}%")
     if fexp_company != "All":
-        esql += " AND c.name = ?"; eqp.append(fexp_company)
+        esql += " AND c.name = %s"; eqp.append(fexp_company)
     if fexp_status != "All":
-        esql += " AND e.status = ?"; eqp.append(fexp_status)
+        esql += " AND e.status = %s"; eqp.append(fexp_status)
     if fexp_from:
-        esql += " AND e.order_date >= ?"; eqp.append(fexp_from.isoformat())
+        esql += " AND e.order_date >= %s"; eqp.append(fexp_from.isoformat())
     if fexp_to:
-        esql += " AND e.order_date <= ?"; eqp.append(fexp_to.isoformat())
+        esql += " AND e.order_date <= %s"; eqp.append(fexp_to.isoformat())
     esql += " ORDER BY e.order_date DESC, e.created_at DESC"
 
     exports = conn.execute(esql, eqp).fetchall()
@@ -465,21 +465,21 @@ def render_exports_page(conn):
             ea.markdown(f"**#{ex['id']}**")
             eb.write(f"{ex['customer_name']} ({ex['country']}), {ex['product']} &nbsp; `{ex['status']}`")
             if ec.button("✓ Mark Done", key=f"exp_done_{ex['id']}", type="primary"):
-                conn.execute("UPDATE exports SET status='dispatched' WHERE id=?", (ex["id"],))
+                conn.execute("UPDATE exports SET status='dispatched' WHERE id=%s", (ex["id"],))
                 conn.commit()
                 st.rerun()
 
     # Delete confirmation
     conf_id = st.session_state.get("confirm_del_exp_id")
     if conf_id:
-        row = conn.execute("SELECT id, customer_name, country FROM exports WHERE id=?",
+        row = conn.execute("SELECT id, customer_name, country FROM exports WHERE id=%s",
                            (conf_id,)).fetchone()
         if row:
             st.warning(f"Delete export #{row['id']} ({row['customer_name']}, {row['country']})? Cannot be undone.")
             yc, nc, _ = st.columns([1,1,8])
             with yc:
                 if st.button("Yes, delete", type="primary"):
-                    conn.execute("DELETE FROM exports WHERE id=?", (conf_id,))
+                    conn.execute("DELETE FROM exports WHERE id=%s", (conf_id,))
                     conn.commit()
                     st.session_state["confirm_del_exp_id"] = None
                     st.rerun()

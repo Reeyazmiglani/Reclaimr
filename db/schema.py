@@ -1,24 +1,23 @@
-import sqlite3
-from pathlib import Path
+from db.connection import connect
 
-DEFAULT_DB = Path(__file__).resolve().parent / "erp.db"
 COMPANIES = [
     ("Rwox", "manufacturing"),
     ("Elastohorse", "trading"),
 ]
 
 
-def create_tables(conn: sqlite3.Connection) -> None:
-    conn.executescript(
+def create_tables(conn) -> None:
+    cur = conn.cursor()
+    cur.execute(
         """
         CREATE TABLE IF NOT EXISTS companies (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             name TEXT NOT NULL UNIQUE,
             business_type TEXT NOT NULL
         );
 
         CREATE TABLE IF NOT EXISTS orders (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             company_id INTEGER NOT NULL,
             customer_name TEXT NOT NULL,
             product TEXT NOT NULL,
@@ -27,12 +26,12 @@ def create_tables(conn: sqlite3.Connection) -> None:
             rate REAL NOT NULL,
             rate_type TEXT NOT NULL DEFAULT 'per_unit',
             expected_dispatch_date TEXT NOT NULL,
-            created_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+            created_at TEXT NOT NULL DEFAULT to_char(now() AT TIME ZONE 'localtime', 'YYYY-MM-DD HH24:MI:SS'),
             FOREIGN KEY (company_id) REFERENCES companies(id)
         );
 
         CREATE TABLE IF NOT EXISTS procurement (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             company_id INTEGER NOT NULL,
             item TEXT NOT NULL,
             quantity REAL NOT NULL,
@@ -45,7 +44,7 @@ def create_tables(conn: sqlite3.Connection) -> None:
         );
 
         CREATE TABLE IF NOT EXISTS production (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             company_id INTEGER NOT NULL,
             product TEXT NOT NULL,
             quantity INTEGER NOT NULL,
@@ -56,7 +55,7 @@ def create_tables(conn: sqlite3.Connection) -> None:
         );
 
         CREATE TABLE IF NOT EXISTS exports (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             company_id INTEGER NOT NULL,
             customer_name TEXT NOT NULL,
             country TEXT NOT NULL,
@@ -74,12 +73,12 @@ def create_tables(conn: sqlite3.Connection) -> None:
             status TEXT NOT NULL DEFAULT 'received',
             shipping_terms TEXT NOT NULL DEFAULT 'FOB',
             notes TEXT,
-            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            created_at TEXT NOT NULL DEFAULT to_char(now(), 'YYYY-MM-DD HH24:MI:SS'),
             FOREIGN KEY (company_id) REFERENCES companies(id)
         );
 
         CREATE TABLE IF NOT EXISTS production_logs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             company_id INTEGER NOT NULL,
             date TEXT NOT NULL,
             batch_ref TEXT NOT NULL,
@@ -98,23 +97,29 @@ def create_tables(conn: sqlite3.Connection) -> None:
             order_id INTEGER,
             temperature_log TEXT,
             additional_notes TEXT,
-            created_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+            created_at TEXT NOT NULL DEFAULT to_char(now() AT TIME ZONE 'localtime', 'YYYY-MM-DD HH24:MI:SS'),
+            purple_material_cost REAL,
+            wax_cost REAL,
+            mc_cost REAL,
+            overhead_cost REAL,
+            total_batch_cost REAL,
+            cost_per_kg REAL,
             FOREIGN KEY (company_id) REFERENCES companies(id),
             FOREIGN KEY (order_id) REFERENCES orders(id)
         );
 
         CREATE TABLE IF NOT EXISTS batch_allocations (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             batch_id INTEGER NOT NULL,
             order_id INTEGER NOT NULL,
             allocated_kg REAL NOT NULL,
-            created_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+            created_at TEXT NOT NULL DEFAULT to_char(now() AT TIME ZONE 'localtime', 'YYYY-MM-DD HH24:MI:SS'),
             FOREIGN KEY (batch_id) REFERENCES production_logs(id),
             FOREIGN KEY (order_id) REFERENCES orders(id)
         );
 
         CREATE TABLE IF NOT EXISTS batch_complaints (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             batch_id INTEGER NOT NULL,
             order_id INTEGER,
             customer_name TEXT,
@@ -127,25 +132,25 @@ def create_tables(conn: sqlite3.Connection) -> None:
             initial_action TEXT NOT NULL,
             logged_by TEXT NOT NULL,
             status TEXT NOT NULL DEFAULT 'open',
-            created_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+            created_at TEXT NOT NULL DEFAULT to_char(now() AT TIME ZONE 'localtime', 'YYYY-MM-DD HH24:MI:SS'),
             FOREIGN KEY (batch_id) REFERENCES production_logs(id),
             FOREIGN KEY (order_id) REFERENCES orders(id)
         );
 
         CREATE TABLE IF NOT EXISTS batch_complaint_updates (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             complaint_id INTEGER NOT NULL,
             date TEXT NOT NULL,
             update_description TEXT NOT NULL,
             action_taken TEXT NOT NULL,
             status TEXT NOT NULL,
             logged_by TEXT NOT NULL,
-            created_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+            created_at TEXT NOT NULL DEFAULT to_char(now() AT TIME ZONE 'localtime', 'YYYY-MM-DD HH24:MI:SS'),
             FOREIGN KEY (complaint_id) REFERENCES batch_complaints(id)
         );
 
         CREATE TABLE IF NOT EXISTS financial_snapshots (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             company_id INTEGER NOT NULL,
             snapshot_date TEXT NOT NULL,
             cash_balance REAL,
@@ -157,7 +162,7 @@ def create_tables(conn: sqlite3.Connection) -> None:
         );
 
         CREATE TABLE IF NOT EXISTS receivables (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             customer_name TEXT NOT NULL,
             company TEXT NOT NULL,
             reference TEXT,
@@ -165,32 +170,33 @@ def create_tables(conn: sqlite3.Connection) -> None:
             date TEXT NOT NULL,
             notes TEXT,
             status TEXT NOT NULL DEFAULT 'outstanding',
-            created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+            created_at TEXT NOT NULL DEFAULT to_char(now() AT TIME ZONE 'localtime', 'YYYY-MM-DD HH24:MI:SS'),
+            last_contacted TEXT
         );
 
         CREATE TABLE IF NOT EXISTS payables (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             vendor_name TEXT NOT NULL,
             description TEXT,
             amount REAL NOT NULL,
             date TEXT NOT NULL,
             notes TEXT,
             status TEXT NOT NULL DEFAULT 'outstanding',
-            created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+            created_at TEXT NOT NULL DEFAULT to_char(now() AT TIME ZONE 'localtime', 'YYYY-MM-DD HH24:MI:SS')
         );
 
         CREATE TABLE IF NOT EXISTS payments (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             type TEXT NOT NULL,
             reference_id INTEGER NOT NULL,
             payment_date TEXT NOT NULL,
             amount_paid REAL NOT NULL,
             notes TEXT,
-            created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+            created_at TEXT NOT NULL DEFAULT to_char(now() AT TIME ZONE 'localtime', 'YYYY-MM-DD HH24:MI:SS')
         );
 
         CREATE TABLE IF NOT EXISTS intercompany_transactions (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             from_company_id INTEGER NOT NULL,
             to_company_id INTEGER NOT NULL,
             amount REAL NOT NULL,
@@ -201,14 +207,14 @@ def create_tables(conn: sqlite3.Connection) -> None:
         );
 
         CREATE TABLE IF NOT EXISTS stock_adjustments (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             date TEXT NOT NULL,
             company_id INTEGER NOT NULL,
             item_type TEXT NOT NULL,
             item_name TEXT NOT NULL,
             adjustment_qty REAL NOT NULL,
             reason TEXT,
-            created_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+            created_at TEXT NOT NULL DEFAULT to_char(now() AT TIME ZONE 'localtime', 'YYYY-MM-DD HH24:MI:SS'),
             FOREIGN KEY (company_id) REFERENCES companies(id)
         );
 
@@ -218,80 +224,48 @@ def create_tables(conn: sqlite3.Connection) -> None:
         );
         """
     )
+    conn.commit()
 
 
-def migrate_db(conn: sqlite3.Connection) -> None:
-    # Rebuild production_logs if it has the old column schema
-    try:
-        conn.execute("SELECT purple_material_kg FROM production_logs LIMIT 1")
-    except sqlite3.OperationalError:
-        conn.execute("DROP TABLE IF EXISTS production_logs")
-        conn.executescript("""
-            CREATE TABLE production_logs (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                company_id INTEGER NOT NULL,
-                date TEXT NOT NULL,
-                batch_ref TEXT NOT NULL,
-                purple_material_kg REAL NOT NULL DEFAULT 0,
-                wax_kg REAL NOT NULL DEFAULT 0,
-                mc_kg REAL NOT NULL DEFAULT 0,
-                output_kg REAL NOT NULL DEFAULT 0,
-                machine_start TEXT,
-                machine_end TEXT,
-                run_time_minutes INTEGER,
-                bottles_1kg INTEGER,
-                bottles_5kg INTEGER,
-                cartons_1kg REAL,
-                cartons_5kg REAL,
-                rejections_kg REAL,
-                order_id INTEGER,
-                temperature_log TEXT,
-                additional_notes TEXT,
-                created_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
-                FOREIGN KEY (company_id) REFERENCES companies(id),
-                FOREIGN KEY (order_id) REFERENCES orders(id)
-            );
-        """)
-
-    for sql in [
-        "ALTER TABLE orders ADD COLUMN quantity_unit TEXT NOT NULL DEFAULT 'units'",
-        "ALTER TABLE orders ADD COLUMN rate_type TEXT NOT NULL DEFAULT 'per_unit'",
-        "ALTER TABLE orders ADD COLUMN status TEXT NOT NULL DEFAULT 'received'",
-        "ALTER TABLE orders ADD COLUMN notes TEXT",
-        "ALTER TABLE orders ADD COLUMN transport_via TEXT",
-        "ALTER TABLE orders ADD COLUMN dispatch_time TEXT",
-        "ALTER TABLE orders ADD COLUMN delivery_deadline TEXT",
-        "ALTER TABLE procurement ADD COLUMN quantity_unit TEXT NOT NULL DEFAULT 'kg'",
-        "ALTER TABLE procurement ADD COLUMN notes TEXT",
-        "ALTER TABLE procurement ADD COLUMN price_type TEXT NOT NULL DEFAULT 'per_unit'",
-        "ALTER TABLE orders ADD COLUMN batch_reference TEXT",
-        "ALTER TABLE production_logs ADD COLUMN purple_material_cost REAL",
-        "ALTER TABLE production_logs ADD COLUMN wax_cost REAL",
-        "ALTER TABLE production_logs ADD COLUMN mc_cost REAL",
-        "ALTER TABLE production_logs ADD COLUMN overhead_cost REAL",
-        "ALTER TABLE production_logs ADD COLUMN total_batch_cost REAL",
-        "ALTER TABLE production_logs ADD COLUMN cost_per_kg REAL",
-        "ALTER TABLE receivables ADD COLUMN last_contacted TEXT",
-    ]:
-        try:
-            conn.execute(sql)
-        except sqlite3.OperationalError:
-            pass  # column already exists
+def migrate_db(conn) -> None:
+    """Add any columns that might be missing on an older Postgres schema."""
+    alter_statements = [
+        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS quantity_unit TEXT NOT NULL DEFAULT 'units'",
+        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS rate_type TEXT NOT NULL DEFAULT 'per_unit'",
+        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'received'",
+        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS notes TEXT",
+        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS transport_via TEXT",
+        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS dispatch_time TEXT",
+        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivery_deadline TEXT",
+        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS batch_reference TEXT",
+        "ALTER TABLE procurement ADD COLUMN IF NOT EXISTS quantity_unit TEXT NOT NULL DEFAULT 'kg'",
+        "ALTER TABLE procurement ADD COLUMN IF NOT EXISTS notes TEXT",
+        "ALTER TABLE procurement ADD COLUMN IF NOT EXISTS price_type TEXT NOT NULL DEFAULT 'per_unit'",
+        "ALTER TABLE production_logs ADD COLUMN IF NOT EXISTS purple_material_cost REAL",
+        "ALTER TABLE production_logs ADD COLUMN IF NOT EXISTS wax_cost REAL",
+        "ALTER TABLE production_logs ADD COLUMN IF NOT EXISTS mc_cost REAL",
+        "ALTER TABLE production_logs ADD COLUMN IF NOT EXISTS overhead_cost REAL",
+        "ALTER TABLE production_logs ADD COLUMN IF NOT EXISTS total_batch_cost REAL",
+        "ALTER TABLE production_logs ADD COLUMN IF NOT EXISTS cost_per_kg REAL",
+        "ALTER TABLE receivables ADD COLUMN IF NOT EXISTS last_contacted TEXT",
+    ]
+    cur = conn.cursor()
+    for sql in alter_statements:
+        cur.execute(sql)
+    conn.commit()
 
 
-def seed_companies(conn: sqlite3.Connection) -> None:
-    conn.executemany(
-        "INSERT OR IGNORE INTO companies (name, business_type) VALUES (?, ?)",
+def seed_companies(conn) -> None:
+    cur = conn.cursor()
+    cur.executemany(
+        "INSERT INTO companies (name, business_type) VALUES (%s, %s) ON CONFLICT (name) DO NOTHING",
         COMPANIES,
     )
+    conn.commit()
 
 
-def init_db(db_path: Path | None = None) -> sqlite3.Connection:
-    db_file = db_path or DEFAULT_DB
-    db_file.parent.mkdir(parents=True, exist_ok=True)
-    connection = sqlite3.connect(str(db_file), check_same_thread=False)
-    connection.row_factory = sqlite3.Row
-    connection.execute("PRAGMA foreign_keys = ON;")
+def init_db(database_url: str):
+    connection = connect(database_url)
     create_tables(connection)
     migrate_db(connection)
     seed_companies(connection)
@@ -300,5 +274,12 @@ def init_db(db_path: Path | None = None) -> sqlite3.Connection:
 
 
 if __name__ == "__main__":
-    init_db()
-    print(f"Initialized SQLite database at {DEFAULT_DB}")
+    import os
+    from dotenv import load_dotenv
+
+    load_dotenv()
+    url = os.getenv("DATABASE_URL")
+    if not url:
+        raise SystemExit("DATABASE_URL is not set")
+    init_db(url)
+    print("Initialized PostgreSQL schema")

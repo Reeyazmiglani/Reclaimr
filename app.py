@@ -14,12 +14,12 @@ load_dotenv()
 
 st.set_page_config(page_title="Reclaimr", layout="wide")
 
-DB_PATH = os.getenv("DB_PATH", "db/erp.db")
+DATABASE_URL = os.getenv("DATABASE_URL")
 
 
 @st.cache_resource
 def get_conn():
-    return init_db(Path(DB_PATH))
+    return init_db(DATABASE_URL)
 
 
 conn = get_conn()
@@ -239,7 +239,7 @@ PLOT = dict(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
 
 
 def qdf(sql, params=None):
-    cur = conn.execute(sql, params or [])
+    cur = conn.execute(sql, params or None)
     rows = cur.fetchall(); cols = [d[0] for d in cur.description]
     return pd.DataFrame([dict(r) for r in rows], columns=cols) if rows else pd.DataFrame(columns=cols)
 
@@ -473,19 +473,19 @@ def load_orders(s, e):
         "SELECT o.id, c.name AS company, o.customer_name, o.product, "
         "o.quantity, o.rate, o.rate_type, o.status, o.created_at "
         "FROM orders o JOIN companies c ON o.company_id=c.id "
-        "WHERE date(o.created_at) BETWEEN ? AND ?", [s, e]))
+        "WHERE o.created_at::date BETWEEN %s AND %s", [s, e]))
 
 def load_proc(s, e):
     return prep_proc(qdf(
         "SELECT p.id, c.name AS company, p.supplier, p.item, "
         "p.quantity, p.unit_cost, p.price_type, p.purchase_date "
         "FROM procurement p JOIN companies c ON p.company_id=c.id "
-        "WHERE p.purchase_date BETWEEN ? AND ?", [s, e]))
+        "WHERE p.purchase_date BETWEEN %s AND %s", [s, e]))
 
 def load_prod(s, e):
     return prep_prod(qdf(
         f"SELECT id, date, output_kg, COALESCE(cartons_1kg,0) AS c1, COALESCE(cartons_5kg,0) AS c5 "
-        f"FROM production_logs WHERE date BETWEEN ? AND ? AND company_id={rwox_id}", [s, e]))
+        f"FROM production_logs WHERE date BETWEEN %s AND %s AND company_id={rwox_id}", [s, e]))
 
 ord_c  = load_orders(ss, es);  ord_p  = load_orders(pss, pes)
 proc_c = load_proc(ss, es);    proc_p = load_proc(pss, pes)
@@ -562,13 +562,13 @@ with tab1:
         "SELECT o.id, c.name AS company, o.customer_name AS customer, o.product, "
         "o.expected_dispatch_date AS due_date, o.status "
         "FROM orders o JOIN companies c ON o.company_id=c.id "
-        "WHERE date(o.expected_dispatch_date) < date('now') AND o.status != 'dispatched' "
+        "WHERE o.expected_dispatch_date::date < CURRENT_DATE AND o.status != 'dispatched' "
         "ORDER BY o.expected_dispatch_date")
     stagnant = qdf(
         "SELECT o.id, c.name AS company, o.customer_name AS customer, o.product, "
         "substr(o.created_at,1,10) AS received_on, o.status "
         "FROM orders o JOIN companies c ON o.company_id=c.id "
-        "WHERE date(o.created_at) <= date('now','-7 days') AND o.status='received' "
+        "WHERE o.created_at::date <= CURRENT_DATE - INTERVAL '7 days' AND o.status='received' "
         "ORDER BY o.created_at")
 
     spikes = []
@@ -583,17 +583,19 @@ with tab1:
                                    "Curr ₹":f"{cp2[item]:,.2f}","Spike":f"+{pct_chg:.1f}%"})
 
     # Migrate receivables from old Financials schema if needed
-    _rec_cols = [r[1] for r in conn.execute("PRAGMA table_info(receivables)").fetchall()]
+    _rec_cols = [r["column_name"] for r in conn.execute(
+        "SELECT column_name FROM information_schema.columns WHERE table_name = 'receivables'"
+    ).fetchall()]
     if _rec_cols and "party_name" in _rec_cols:
         conn.executescript("""
             ALTER TABLE receivables RENAME TO receivables_old;
             CREATE TABLE receivables (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 customer_name TEXT NOT NULL,
                 company TEXT NOT NULL DEFAULT '',
                 reference TEXT, amount REAL NOT NULL, date TEXT NOT NULL,
                 notes TEXT, status TEXT NOT NULL DEFAULT 'outstanding',
-                created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+                created_at TEXT NOT NULL DEFAULT to_char(now() AT TIME ZONE 'localtime', 'YYYY-MM-DD HH24:MI:SS')
             );
             INSERT INTO receivables (id, customer_name, company, reference, amount, date, notes, status, created_at)
             SELECT r.id, r.party_name, COALESCE(c.name,''), NULL,
@@ -603,41 +605,43 @@ with tab1:
         """)
         conn.commit()
 
+    # These tables are already created by db/schema.py on every init_db() call;
+    # this block is kept (IF NOT EXISTS) only as a defensive no-op safety net.
     conn.executescript("""
         CREATE TABLE IF NOT EXISTS batch_complaints (
-            id INTEGER PRIMARY KEY AUTOINCREMENT, batch_id INTEGER NOT NULL,
+            id SERIAL PRIMARY KEY, batch_id INTEGER NOT NULL,
             order_id INTEGER, customer_name TEXT, date TEXT NOT NULL,
             issue_type TEXT NOT NULL, description TEXT NOT NULL,
             quantity_affected REAL, physical_return INTEGER NOT NULL DEFAULT 0,
             quantity_returned REAL, initial_action TEXT NOT NULL,
             logged_by TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'open',
-            created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+            created_at TEXT NOT NULL DEFAULT to_char(now() AT TIME ZONE 'localtime', 'YYYY-MM-DD HH24:MI:SS')
         );
         CREATE TABLE IF NOT EXISTS batch_allocations (
-            id INTEGER PRIMARY KEY AUTOINCREMENT, batch_id INTEGER NOT NULL,
+            id SERIAL PRIMARY KEY, batch_id INTEGER NOT NULL,
             order_id INTEGER NOT NULL, allocated_kg REAL NOT NULL,
-            created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+            created_at TEXT NOT NULL DEFAULT to_char(now() AT TIME ZONE 'localtime', 'YYYY-MM-DD HH24:MI:SS')
         );
         CREATE TABLE IF NOT EXISTS receivables (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             customer_name TEXT NOT NULL,
             company TEXT NOT NULL DEFAULT '',
             reference TEXT, amount REAL NOT NULL, date TEXT NOT NULL,
             notes TEXT, status TEXT NOT NULL DEFAULT 'outstanding',
-            created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+            created_at TEXT NOT NULL DEFAULT to_char(now() AT TIME ZONE 'localtime', 'YYYY-MM-DD HH24:MI:SS')
         );
         CREATE TABLE IF NOT EXISTS payables (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             vendor_name TEXT NOT NULL, description TEXT,
             amount REAL NOT NULL, date TEXT NOT NULL,
             notes TEXT, status TEXT NOT NULL DEFAULT 'outstanding',
-            created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+            created_at TEXT NOT NULL DEFAULT to_char(now() AT TIME ZONE 'localtime', 'YYYY-MM-DD HH24:MI:SS')
         );
         CREATE TABLE IF NOT EXISTS payments (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             type TEXT NOT NULL, reference_id INTEGER NOT NULL,
             payment_date TEXT NOT NULL, amount_paid REAL NOT NULL,
-            notes TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+            notes TEXT, created_at TEXT NOT NULL DEFAULT to_char(now() AT TIME ZONE 'localtime', 'YYYY-MM-DD HH24:MI:SS')
         );
     """)
     conn.commit()
@@ -650,7 +654,7 @@ with tab1:
         "SELECT pl.batch_ref, pl.date, pl.output_kg, SUM(ba.allocated_kg) AS total_allocated "
         "FROM batch_allocations ba "
         "JOIN production_logs pl ON ba.batch_id = pl.id "
-        "GROUP BY ba.batch_id "
+        "GROUP BY pl.id, ba.batch_id "
         "HAVING SUM(ba.allocated_kg) > pl.output_kg "
         "ORDER BY pl.date DESC")
 
@@ -658,24 +662,24 @@ with tab1:
         SELECT r.customer_name, r.company,
                r.amount - COALESCE(SUM(p.amount_paid),0) AS balance,
                r.date,
-               CAST(julianday('now','localtime') - julianday(r.date) AS INTEGER) AS days
+               (CURRENT_DATE - r.date::date) AS days
         FROM receivables r
         LEFT JOIN payments p ON p.type='receivable' AND p.reference_id=r.id
         WHERE r.status != 'paid'
         GROUP BY r.id
-        HAVING days > 45
+        HAVING (CURRENT_DATE - r.date::date) > 45
         ORDER BY days DESC""")
 
     overdue_pay = qdf("""
         SELECT p.vendor_name,
                p.amount - COALESCE(SUM(pm.amount_paid),0) AS balance,
                p.date,
-               CAST(julianday('now','localtime') - julianday(p.date) AS INTEGER) AS days
+               (CURRENT_DATE - p.date::date) AS days
         FROM payables p
         LEFT JOIN payments pm ON pm.type='payable' AND pm.reference_id=p.id
         WHERE p.status != 'paid'
         GROUP BY p.id
-        HAVING days > 45
+        HAVING (CURRENT_DATE - p.date::date) > 45
         ORDER BY days DESC""")
 
     all_clear = (overdue.empty and stagnant.empty and not spikes

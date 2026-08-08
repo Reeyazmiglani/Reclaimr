@@ -10,12 +10,12 @@ from utils.auth import require_auth, render_logout_button
 load_dotenv()
 
 
-DB_PATH = os.getenv("DB_PATH", "db/erp.db")
+DATABASE_URL = os.getenv("DATABASE_URL")
 
 
 @st.cache_resource
 def _get_conn():
-    return init_db(Path(DB_PATH))
+    return init_db(DATABASE_URL)
 
 
 require_auth(_get_conn())
@@ -121,7 +121,7 @@ def _groq_call(prompt: str) -> str:
 def _ensure_tables(conn):
     conn.executescript("""
         CREATE TABLE IF NOT EXISTS monthly_updates (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             month TEXT NOT NULL UNIQUE,
             rwox_sales REAL DEFAULT 0,
             elastohorse_sales REAL DEFAULT 0,
@@ -130,37 +130,37 @@ def _ensure_tables(conn):
             expenses_json TEXT,
             big_payments_json TEXT,
             notes TEXT,
-            created_at TEXT DEFAULT (datetime('now','localtime'))
+            created_at TEXT DEFAULT (to_char(now() AT TIME ZONE 'localtime', 'YYYY-MM-DD HH24:MI:SS'))
         );
         CREATE TABLE IF NOT EXISTS receivables (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             customer_name TEXT NOT NULL,
             company TEXT NOT NULL DEFAULT '',
             reference TEXT, amount REAL NOT NULL, date TEXT NOT NULL,
             notes TEXT, status TEXT NOT NULL DEFAULT 'outstanding',
-            created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+            created_at TEXT NOT NULL DEFAULT (to_char(now() AT TIME ZONE 'localtime', 'YYYY-MM-DD HH24:MI:SS'))
         );
         CREATE TABLE IF NOT EXISTS payables (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             vendor_name TEXT NOT NULL, description TEXT,
             amount REAL NOT NULL, date TEXT NOT NULL,
             notes TEXT, status TEXT NOT NULL DEFAULT 'outstanding',
-            created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+            created_at TEXT NOT NULL DEFAULT (to_char(now() AT TIME ZONE 'localtime', 'YYYY-MM-DD HH24:MI:SS'))
         );
         CREATE TABLE IF NOT EXISTS payments (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             type TEXT NOT NULL, reference_id INTEGER NOT NULL,
             payment_date TEXT NOT NULL, amount_paid REAL NOT NULL,
-            notes TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+            notes TEXT, created_at TEXT NOT NULL DEFAULT (to_char(now() AT TIME ZONE 'localtime', 'YYYY-MM-DD HH24:MI:SS'))
         );
         CREATE TABLE IF NOT EXISTS batch_complaints (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             batch_id INTEGER NOT NULL, order_id INTEGER, customer_name TEXT,
             date TEXT NOT NULL, issue_type TEXT NOT NULL, description TEXT NOT NULL,
             quantity_affected REAL, physical_return INTEGER NOT NULL DEFAULT 0,
             quantity_returned REAL, initial_action TEXT NOT NULL,
             logged_by TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'open',
-            created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+            created_at TEXT NOT NULL DEFAULT (to_char(now() AT TIME ZONE 'localtime', 'YYYY-MM-DD HH24:MI:SS'))
         );
     """)
     conn.commit()
@@ -181,13 +181,13 @@ def _build_ai_context(conn):
                SUM(CASE WHEN status='received' THEN 1 ELSE 0 END) as received,
                SUM(CASE WHEN status='in_production' THEN 1 ELSE 0 END) as in_production,
                SUM(CASE WHEN status='dispatched' THEN 1 ELSE 0 END) as dispatched,
-               SUM(CASE WHEN date(expected_dispatch_date) < date('now') AND status != 'dispatched' THEN 1 ELSE 0 END) as overdue
-        FROM orders WHERE strftime('%Y-%m', created_at) = ?
+               SUM(CASE WHEN expected_dispatch_date::date < CURRENT_DATE AND status != 'dispatched' THEN 1 ELSE 0 END) as overdue
+        FROM orders WHERE to_char(created_at::date, 'YYYY-MM') = %s
     """, (this_month,)).fetchone()
 
     rev = conn.execute("""
         SELECT COALESCE(SUM(CASE WHEN rate_type='per_unit' THEN quantity*rate ELSE rate END), 0)
-        FROM orders WHERE strftime('%Y-%m', created_at) = ?
+        FROM orders WHERE to_char(created_at::date, 'YYYY-MM') = %s
     """, (this_month,)).fetchone()[0]
 
     rec_row = conn.execute("""
@@ -199,7 +199,7 @@ def _build_ai_context(conn):
             WHERE type='receivable' GROUP BY reference_id
         ) px ON px.reference_id = r.id
         WHERE r.status != 'paid'
-        AND CAST(julianday('now','localtime') - julianday(r.date) AS INTEGER) > ?
+        AND (CURRENT_DATE - r.date::date) > %s
     """, (overdue_days,)).fetchone()
 
     complaints = conn.execute(
@@ -214,7 +214,7 @@ def _build_ai_context(conn):
         SELECT COALESCE(SUM(output_kg),0) AS kg,
                COALESCE(SUM(total_batch_cost),0) AS cost
         FROM production_logs
-        WHERE strftime('%Y-%m', date) = ?
+        WHERE to_char(date::date, 'YYYY-MM') = %s
     """, (this_month,)).fetchone()
 
     proc_rows = conn.execute("""
@@ -311,7 +311,7 @@ def render_intelligence_page(conn):
     # ── Live counts for header & metrics ──────────────────────────────────────
     due_today_overdue = conn.execute(
         "SELECT COUNT(*) FROM orders "
-        "WHERE date(expected_dispatch_date) <= date('now') AND status != 'dispatched'"
+        "WHERE expected_dispatch_date::date <= CURRENT_DATE AND status != 'dispatched'"
     ).fetchone()[0]
 
     overdue_rec_row = conn.execute("""
@@ -323,7 +323,7 @@ def render_intelligence_page(conn):
             WHERE type='receivable' GROUP BY reference_id
         ) px ON px.reference_id = r.id
         WHERE r.status != 'paid'
-        AND CAST(julianday('now','localtime') - julianday(r.date) AS INTEGER) > ?
+        AND (CURRENT_DATE - r.date::date) > %s
     """, (overdue_days,)).fetchone()
     overdue_rec_count  = overdue_rec_row["cnt"]
     overdue_rec_amount = overdue_rec_row["total"]
@@ -334,13 +334,13 @@ def render_intelligence_page(conn):
 
     stagnant_count = conn.execute(
         "SELECT COUNT(*) FROM orders "
-        "WHERE date(created_at) <= date('now','-7 days') AND status='received'"
+        "WHERE created_at::date <= CURRENT_DATE - INTERVAL '7 days' AND status='received'"
     ).fetchone()[0]
 
     overdue_pay_count = conn.execute("""
         SELECT COUNT(*) FROM payables p
         WHERE p.status != 'paid'
-        AND CAST(julianday('now','localtime') - julianday(p.date) AS INTEGER) > ?
+        AND (CURRENT_DATE - p.date::date) > %s
     """, (overdue_days,)).fetchone()[0]
 
     total_issues = (due_today_overdue + overdue_rec_count + open_complaints
@@ -434,12 +434,12 @@ def render_intelligence_page(conn):
 
     this_rev = conn.execute("""
         SELECT COALESCE(SUM(CASE WHEN rate_type='per_unit' THEN quantity*rate ELSE rate END), 0)
-        FROM orders WHERE strftime('%Y-%m', created_at) = ?
+        FROM orders WHERE to_char(created_at::date, 'YYYY-MM') = %s
     """, (this_month,)).fetchone()[0]
 
     last_rev = conn.execute("""
         SELECT COALESCE(SUM(CASE WHEN rate_type='per_unit' THEN quantity*rate ELSE rate END), 0)
-        FROM orders WHERE strftime('%Y-%m', created_at) = ?
+        FROM orders WHERE to_char(created_at::date, 'YYYY-MM') = %s
     """, (last_month,)).fetchone()[0]
 
     fy_monthly_avg = (15_451_424 + 14_972_732) / 12
@@ -473,9 +473,9 @@ def render_intelligence_page(conn):
     # Overdue orders → Mark Dispatched
     for r in conn.execute("""
         SELECT o.id, o.customer_name, o.product, o.expected_dispatch_date,
-               CAST(julianday('now','localtime') - julianday(o.expected_dispatch_date) AS INTEGER) AS days_late
+               (CURRENT_DATE - o.expected_dispatch_date::date) AS days_late
         FROM orders o JOIN companies c ON o.company_id=c.id
-        WHERE date(o.expected_dispatch_date) < date('now') AND o.status != 'dispatched'
+        WHERE o.expected_dispatch_date::date < CURRENT_DATE AND o.status != 'dispatched'
         ORDER BY o.expected_dispatch_date ASC
     """).fetchall():
         actions.append((r["days_late"], "📦", _RED,
@@ -486,11 +486,11 @@ def render_intelligence_page(conn):
     # Overdue receivables → Mark as Contacted
     for r in conn.execute("""
         SELECT r.id, r.customer_name, r.amount - COALESCE(SUM(p.amount_paid),0) AS balance,
-               CAST(julianday('now','localtime') - julianday(r.date) AS INTEGER) AS days
+               (CURRENT_DATE - r.date::date) AS days
         FROM receivables r
         LEFT JOIN payments p ON p.type='receivable' AND p.reference_id=r.id
         WHERE r.status != 'paid'
-        GROUP BY r.id HAVING days > ?
+        GROUP BY r.id HAVING (CURRENT_DATE - r.date::date) > %s
         ORDER BY days DESC
     """, (overdue_days,)).fetchall():
         actions.append((r["days"], "💰", _RED,
@@ -502,7 +502,7 @@ def render_intelligence_page(conn):
     # Open complaints → Mark Resolved
     for r in conn.execute("""
         SELECT bc.id, bc.customer_name, bc.issue_type,
-               CAST(julianday('now','localtime') - julianday(bc.date) AS INTEGER) AS days_open,
+               (CURRENT_DATE - bc.date::date) AS days_open,
                pl.batch_ref
         FROM batch_complaints bc
         JOIN production_logs pl ON bc.batch_id = pl.id
@@ -519,11 +519,11 @@ def render_intelligence_page(conn):
     # Overdue payables — no action button (handle from Credit page)
     for r in conn.execute("""
         SELECT p.vendor_name, p.amount - COALESCE(SUM(pm.amount_paid),0) AS balance,
-               CAST(julianday('now','localtime') - julianday(p.date) AS INTEGER) AS days
+               (CURRENT_DATE - p.date::date) AS days
         FROM payables p
         LEFT JOIN payments pm ON pm.type='payable' AND pm.reference_id=p.id
         WHERE p.status != 'paid'
-        GROUP BY p.id HAVING days > 30
+        GROUP BY p.id HAVING (CURRENT_DATE - p.date::date) > 30
         ORDER BY days DESC
     """).fetchall():
         actions.append((r["days"], "🧾", _YELLOW,
@@ -535,9 +535,9 @@ def render_intelligence_page(conn):
     # Stagnant orders → Move to Production
     for r in conn.execute("""
         SELECT o.id, o.customer_name, o.product, o.expected_dispatch_date,
-               CAST(julianday('now','localtime') - julianday(o.created_at) AS INTEGER) AS waiting_days
+               (CURRENT_DATE - o.created_at::date) AS waiting_days
         FROM orders o JOIN companies c ON o.company_id=c.id
-        WHERE date(o.created_at) <= date('now','-7 days') AND o.status='received'
+        WHERE o.created_at::date <= CURRENT_DATE - INTERVAL '7 days' AND o.status='received'
         ORDER BY waiting_days DESC
     """).fetchall():
         actions.append((r["waiting_days"], "🏭", _YELLOW,
@@ -588,17 +588,17 @@ def render_intelligence_page(conn):
                                  use_container_width=True):
                         if action_type == "dispatch":
                             conn.execute(
-                                "UPDATE orders SET status='dispatched' WHERE id=?", (record_id,))
+                                "UPDATE orders SET status='dispatched' WHERE id=%s", (record_id,))
                         elif action_type == "contacted":
                             conn.execute(
-                                "UPDATE receivables SET last_contacted=date('now','localtime') WHERE id=?",
+                                "UPDATE receivables SET last_contacted=CURRENT_DATE WHERE id=%s",
                                 (record_id,))
                         elif action_type == "resolve_complaint":
                             conn.execute(
-                                "UPDATE batch_complaints SET status='resolved' WHERE id=?", (record_id,))
+                                "UPDATE batch_complaints SET status='resolved' WHERE id=%s", (record_id,))
                         elif action_type == "to_production":
                             conn.execute(
-                                "UPDATE orders SET status='in_production' WHERE id=?", (record_id,))
+                                "UPDATE orders SET status='in_production' WHERE id=%s", (record_id,))
                         conn.commit()
                         st.success("Done!")
                         st.rerun()
@@ -619,7 +619,7 @@ def render_intelligence_page(conn):
         rows = conn.execute("""
             SELECT o.customer_name, o.product, o.expected_dispatch_date, c.name AS company
             FROM orders o JOIN companies c ON o.company_id=c.id
-            WHERE date(o.expected_dispatch_date) BETWEEN ? AND ? AND o.status != 'dispatched'
+            WHERE o.expected_dispatch_date::date BETWEEN %s AND %s AND o.status != 'dispatched'
             ORDER BY o.expected_dispatch_date ASC
         """, (today_s, week_end_s)).fetchall()
         if rows:
@@ -638,8 +638,8 @@ def render_intelligence_page(conn):
                    r.date
             FROM receivables r
             LEFT JOIN payments p ON p.type='receivable' AND p.reference_id=r.id
-            WHERE r.status != 'paid' AND date(r.date) BETWEEN ? AND ?
-            GROUP BY r.id HAVING balance > 0
+            WHERE r.status != 'paid' AND r.date::date BETWEEN %s AND %s
+            GROUP BY r.id HAVING r.amount - COALESCE(SUM(p.amount_paid),0) > 0
             ORDER BY r.date ASC
         """, (today_s, week_end_s)).fetchall()
         if rows:
@@ -658,8 +658,8 @@ def render_intelligence_page(conn):
                    p.date
             FROM payables p
             LEFT JOIN payments pm ON pm.type='payable' AND pm.reference_id=p.id
-            WHERE p.status != 'paid' AND date(p.date) BETWEEN ? AND ?
-            GROUP BY p.id HAVING balance > 0
+            WHERE p.status != 'paid' AND p.date::date BETWEEN %s AND %s
+            GROUP BY p.id HAVING p.amount - COALESCE(SUM(pm.amount_paid),0) > 0
             ORDER BY p.date ASC
         """, (today_s, week_end_s)).fetchall()
         if rows:
@@ -676,7 +676,7 @@ def render_intelligence_page(conn):
             SELECT o.customer_name, o.product, o.expected_dispatch_date, c.name AS company
             FROM orders o JOIN companies c ON o.company_id=c.id
             WHERE o.status IN ('received','in_production')
-            AND date(o.expected_dispatch_date) BETWEEN ? AND ?
+            AND o.expected_dispatch_date::date BETWEEN %s AND %s
             ORDER BY o.expected_dispatch_date ASC
         """, (today_s, week_end_s)).fetchall()
         if rows:
@@ -698,17 +698,17 @@ def render_intelligence_page(conn):
 
         lw_rev = conn.execute("""
             SELECT COALESCE(SUM(CASE WHEN rate_type='per_unit' THEN quantity*rate ELSE rate END), 0)
-            FROM orders WHERE date(created_at) BETWEEN ? AND ?
+            FROM orders WHERE created_at::date BETWEEN %s AND %s
         """, (lw_start, lw_end)).fetchone()[0]
 
         lw_dispatched = conn.execute("""
             SELECT COUNT(*) FROM orders WHERE status='dispatched'
-            AND date(created_at) BETWEEN ? AND ?
+            AND created_at::date BETWEEN %s AND %s
         """, (lw_start, lw_end)).fetchone()[0]
 
         lw_prod = conn.execute("""
             SELECT COALESCE(SUM(output_kg), 0) FROM production_logs
-            WHERE date BETWEEN ? AND ?
+            WHERE date BETWEEN %s AND %s
         """, (lw_start, lw_end)).fetchone()[0]
 
         ws1, ws2, ws3 = st.columns(3)
@@ -719,7 +719,7 @@ def render_intelligence_page(conn):
         recurring = conn.execute("""
             SELECT customer_name, COUNT(*) as cnt
             FROM batch_complaints WHERE status != 'resolved' AND customer_name IS NOT NULL
-            GROUP BY customer_name HAVING cnt > 1
+            GROUP BY customer_name HAVING COUNT(*) > 1
             ORDER BY cnt DESC LIMIT 3
         """).fetchall()
 

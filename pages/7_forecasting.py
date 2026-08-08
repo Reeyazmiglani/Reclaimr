@@ -10,12 +10,12 @@ from utils.auth import require_auth, render_logout_button
 
 load_dotenv()
 
-DB_PATH = os.getenv("DB_PATH", "db/erp.db")
+DATABASE_URL = os.getenv("DATABASE_URL")
 
 
 @st.cache_resource
 def _get_conn():
-    return init_db(Path(DB_PATH))
+    return init_db(DATABASE_URL)
 
 
 require_auth(_get_conn())
@@ -151,12 +151,12 @@ def _kpi(col, label: str, value: str, delta_html: str = "", border_color: str = 
 def _ensure_tables(conn) -> None:
     conn.executescript("""
         CREATE TABLE IF NOT EXISTS forecast_targets (
-            id                          INTEGER PRIMARY KEY AUTOINCREMENT,
+            id                          SERIAL PRIMARY KEY,
             rwox_monthly_revenue        REAL DEFAULT 0,
             elastohorse_monthly_revenue REAL DEFAULT 0,
             combined_profit_margin      REAL DEFAULT 10,
             monthly_production_kg       REAL DEFAULT 0,
-            updated_at                  TEXT DEFAULT (datetime('now','localtime'))
+            updated_at                  TEXT DEFAULT (to_char(now() AT TIME ZONE 'localtime', 'YYYY-MM-DD HH24:MI:SS'))
         );
     """)
     conn.commit()
@@ -178,32 +178,32 @@ def _load_actuals(_conn) -> dict:
         return _conn.execute(
             "SELECT COALESCE(SUM(CASE WHEN rate_type='per_unit' THEN quantity*rate "
             "ELSE rate END),0) FROM orders "
-            "WHERE company_id=? AND strftime('%Y-%m',created_at)=?",
+            "WHERE company_id=%s AND to_char(created_at::date,'YYYY-MM')=%s",
             (cid, this_m)).fetchone()[0]
 
     def _pending_rev(cid):
         return _conn.execute(
             "SELECT COALESCE(SUM(CASE WHEN rate_type='per_unit' THEN quantity*rate "
             "ELSE rate END),0) FROM orders "
-            "WHERE company_id=? AND status IN ('received','in_production','ready')",
+            "WHERE company_id=%s AND status IN ('received','in_production','ready')",
             (cid,)).fetchone()[0]
 
     def _pending_qty(cid):
         return _conn.execute(
             "SELECT COALESCE(SUM(quantity),0) FROM orders "
-            "WHERE company_id=? AND status IN ('received','in_production')",
+            "WHERE company_id=%s AND status IN ('received','in_production')",
             (cid,)).fetchone()[0]
 
     pr = _conn.execute(
         "SELECT COALESCE(AVG(m),0) FROM ("
         "  SELECT SUM(output_kg) AS m FROM production_logs "
-        "  WHERE company_id=? AND date>=? GROUP BY strftime('%Y-%m',date)"
+        "  WHERE company_id=%s AND date>=%s GROUP BY to_char(date::date,'YYYY-MM')"
         ")", (rid, t90)).fetchone()
     avg_prod = pr[0] if pr and pr[0] else _FALLBACK_PROD_KG
 
     ap = _conn.execute(
         "SELECT COALESCE(AVG(rate),0) FROM ("
-        "  SELECT rate FROM orders WHERE company_id=? AND rate_type='per_unit' AND rate>0 "
+        "  SELECT rate FROM orders WHERE company_id=%s AND rate_type='per_unit' AND rate>0 "
         "  ORDER BY created_at DESC LIMIT 30"
         ")", (rid,)).fetchone()
     avg_price = ap[0] if ap and ap[0] > 0 else _FALLBACK_PRICE
@@ -215,19 +215,19 @@ def _load_actuals(_conn) -> dict:
         if mu and mu[0]:
             return float(mu[0])
         snap = _conn.execute(
-            "SELECT cash_balance FROM financial_snapshots WHERE company_id=? "
+            "SELECT cash_balance FROM financial_snapshots WHERE company_id=%s "
             "ORDER BY snapshot_date DESC LIMIT 1", (cid,)).fetchone()
         return float(snap[0]) if snap and snap[0] else fallback
 
     pc = _conn.execute(
         "SELECT COALESCE(SUM(CASE WHEN price_type='per_unit' "
         "THEN quantity*unit_cost ELSE unit_cost END),0) "
-        "FROM procurement WHERE purchase_date>=?", (t30,)).fetchone()
+        "FROM procurement WHERE purchase_date>=%s", (t30,)).fetchone()
 
     mat = {}
     for row in _conn.execute(
         "SELECT LOWER(item) AS itm, AVG(unit_cost) AS c FROM procurement "
-        "WHERE company_id=? AND price_type='per_unit' GROUP BY LOWER(item)",
+        "WHERE company_id=%s AND price_type='per_unit' GROUP BY LOWER(item)",
         (rid,)).fetchall():
         mat[row["itm"]] = row["c"]
 
@@ -299,7 +299,7 @@ def _tab_targets(conn, actuals: dict, view: str, kp: str) -> None:
         conn.execute(
             "INSERT INTO forecast_targets (rwox_monthly_revenue, "
             "elastohorse_monthly_revenue, combined_profit_margin, monthly_production_kg) "
-            "VALUES (?,?,?,?)",
+            "VALUES (%s,%s,%s,%s)",
             (r_tgt, e_tgt, margin_tgt, prod_tgt))
         conn.commit()
         st.success("Targets saved.")

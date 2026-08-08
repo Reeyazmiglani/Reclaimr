@@ -9,12 +9,12 @@ from utils.auth import require_auth, render_logout_button
 
 load_dotenv()
 
-DB_PATH = os.getenv("DB_PATH", "db/erp.db")
+DATABASE_URL = os.getenv("DATABASE_URL")
 
 
 @st.cache_resource
 def _get_conn():
-    return init_db(Path(DB_PATH))
+    return init_db(DATABASE_URL)
 
 
 require_auth(_get_conn())
@@ -82,12 +82,14 @@ _DARK_CSS = (
 
 def _ensure_credit_tables(conn):
     # Migrate receivables if it still has the old Financials schema (party_name column)
-    old_cols = [r[1] for r in conn.execute("PRAGMA table_info(receivables)").fetchall()]
+    old_cols = [r["column_name"] for r in conn.execute(
+        "SELECT column_name FROM information_schema.columns WHERE table_name = 'receivables'"
+    ).fetchall()]
     if old_cols and "party_name" in old_cols:
         conn.executescript("""
             ALTER TABLE receivables RENAME TO receivables_old;
             CREATE TABLE receivables (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 customer_name TEXT NOT NULL,
                 company TEXT NOT NULL DEFAULT '',
                 reference TEXT,
@@ -95,7 +97,7 @@ def _ensure_credit_tables(conn):
                 date TEXT NOT NULL,
                 notes TEXT,
                 status TEXT NOT NULL DEFAULT 'outstanding',
-                created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+                created_at TEXT NOT NULL DEFAULT (to_char(now() AT TIME ZONE 'localtime', 'YYYY-MM-DD HH24:MI:SS'))
             );
             INSERT INTO receivables (id, customer_name, company, reference, amount, date, notes, status, created_at)
             SELECT r.id, r.party_name, COALESCE(c.name, ''), NULL,
@@ -115,7 +117,7 @@ def _ensure_credit_tables(conn):
 
     conn.executescript("""
         CREATE TABLE IF NOT EXISTS receivables (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             customer_name TEXT NOT NULL,
             company TEXT NOT NULL DEFAULT '',
             reference TEXT,
@@ -123,26 +125,26 @@ def _ensure_credit_tables(conn):
             date TEXT NOT NULL,
             notes TEXT,
             status TEXT NOT NULL DEFAULT 'outstanding',
-            created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+            created_at TEXT NOT NULL DEFAULT (to_char(now() AT TIME ZONE 'localtime', 'YYYY-MM-DD HH24:MI:SS'))
         );
         CREATE TABLE IF NOT EXISTS payables (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             vendor_name TEXT NOT NULL,
             description TEXT,
             amount REAL NOT NULL,
             date TEXT NOT NULL,
             notes TEXT,
             status TEXT NOT NULL DEFAULT 'outstanding',
-            created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+            created_at TEXT NOT NULL DEFAULT (to_char(now() AT TIME ZONE 'localtime', 'YYYY-MM-DD HH24:MI:SS'))
         );
         CREATE TABLE IF NOT EXISTS payments (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             type TEXT NOT NULL,
             reference_id INTEGER NOT NULL,
             payment_date TEXT NOT NULL,
             amount_paid REAL NOT NULL,
             notes TEXT,
-            created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+            created_at TEXT NOT NULL DEFAULT (to_char(now() AT TIME ZONE 'localtime', 'YYYY-MM-DD HH24:MI:SS'))
         );
     """)
     conn.commit()
@@ -298,7 +300,7 @@ def render_credit_page(conn):
             else:
                 conn.execute(
                     "INSERT INTO receivables (customer_name, company, reference, amount, date, notes) "
-                    "VALUES (?,?,?,?,?,?)",
+                    "VALUES (%s,%s,%s,%s,%s,%s)",
                     (nr_customer.strip(), nr_company, nr_ref.strip() or None,
                      nr_amount, nr_date.isoformat(), nr_notes.strip() or None),
                 )
@@ -313,7 +315,7 @@ def render_credit_page(conn):
             "SELECT r.*, COALESCE(SUM(p.amount_paid), 0) AS total_paid "
             "FROM receivables r "
             "LEFT JOIN payments p ON p.type='receivable' AND p.reference_id=r.id "
-            "WHERE r.id=? GROUP BY r.id",
+            "WHERE r.id=%s GROUP BY r.id",
             (paying_rec_id,),
         ).fetchone()
         if rec_row:
@@ -346,13 +348,13 @@ def render_credit_page(conn):
                 else:
                     conn.execute(
                         "INSERT INTO payments (type, reference_id, payment_date, amount_paid, notes) "
-                        "VALUES (?,?,?,?,?)",
+                        "VALUES (%s,%s,%s,%s,%s)",
                         ("receivable", paying_rec_id, pr_date.isoformat(),
                          pr_amount, pr_notes.strip() or None),
                     )
                     new_total = rec_row["total_paid"] + pr_amount
                     new_status = "paid" if new_total >= rec_row["amount"] else "partial"
-                    conn.execute("UPDATE receivables SET status=? WHERE id=?", (new_status, paying_rec_id))
+                    conn.execute("UPDATE receivables SET status=%s WHERE id=%s", (new_status, paying_rec_id))
                     conn.commit()
                     st.session_state.pop("paying_rec_id", None)
                     st.success("Payment recorded.")
@@ -364,14 +366,14 @@ def render_credit_page(conn):
     # Delete confirm flows
     confirm_del_rec = st.session_state.get("confirm_del_rec_id")
     if confirm_del_rec:
-        del_r = conn.execute("SELECT customer_name, amount FROM receivables WHERE id=?", (confirm_del_rec,)).fetchone()
+        del_r = conn.execute("SELECT customer_name, amount FROM receivables WHERE id=%s", (confirm_del_rec,)).fetchone()
         if del_r:
-            st.warning(f"Delete receivable from **{del_r['customer_name']}** ({_inr(del_r['amount'])})? This also removes any payment records. Cannot be undone.")
+            st.warning(f"Delete receivable from **{del_r['customer_name']}** ({_inr(del_r['amount'])})%s This also removes any payment records. Cannot be undone.")
             dc1, dc2, _ = st.columns([1, 1, 8])
             with dc1:
                 if st.button("Yes, delete", key="conf_del_rec_yes", type="primary"):
-                    conn.execute("DELETE FROM payments WHERE type='receivable' AND reference_id=?", (confirm_del_rec,))
-                    conn.execute("DELETE FROM receivables WHERE id=?", (confirm_del_rec,))
+                    conn.execute("DELETE FROM payments WHERE type='receivable' AND reference_id=%s", (confirm_del_rec,))
+                    conn.execute("DELETE FROM receivables WHERE id=%s", (confirm_del_rec,))
                     conn.commit()
                     st.session_state.pop("confirm_del_rec_id", None)
                     st.rerun()
@@ -452,7 +454,7 @@ def render_credit_page(conn):
                     f"{_inr(pr['amount'])} · *{pr['date']}*{ref_str}"
                 )
                 pay_rows = conn.execute(
-                    "SELECT * FROM payments WHERE type='receivable' AND reference_id=? "
+                    "SELECT * FROM payments WHERE type='receivable' AND reference_id=%s "
                     "ORDER BY payment_date ASC",
                     (pr["id"],),
                 ).fetchall()
@@ -488,7 +490,7 @@ def render_credit_page(conn):
             else:
                 conn.execute(
                     "INSERT INTO payables (vendor_name, description, amount, date, notes) "
-                    "VALUES (?,?,?,?,?)",
+                    "VALUES (%s,%s,%s,%s,%s)",
                     (np_vendor.strip(), np_desc.strip() or None,
                      np_amount, np_date.isoformat(), np_notes.strip() or None),
                 )
@@ -503,7 +505,7 @@ def render_credit_page(conn):
             "SELECT p.*, COALESCE(SUM(pm.amount_paid), 0) AS total_paid "
             "FROM payables p "
             "LEFT JOIN payments pm ON pm.type='payable' AND pm.reference_id=p.id "
-            "WHERE p.id=? GROUP BY p.id",
+            "WHERE p.id=%s GROUP BY p.id",
             (paying_pay_id,),
         ).fetchone()
         if pay_row:
@@ -535,13 +537,13 @@ def render_credit_page(conn):
                 else:
                     conn.execute(
                         "INSERT INTO payments (type, reference_id, payment_date, amount_paid, notes) "
-                        "VALUES (?,?,?,?,?)",
+                        "VALUES (%s,%s,%s,%s,%s)",
                         ("payable", paying_pay_id, pp_date.isoformat(),
                          pp_amount, pp_notes.strip() or None),
                     )
                     new_total = pay_row["total_paid"] + pp_amount
                     new_status = "paid" if new_total >= pay_row["amount"] else "partial"
-                    conn.execute("UPDATE payables SET status=? WHERE id=?", (new_status, paying_pay_id))
+                    conn.execute("UPDATE payables SET status=%s WHERE id=%s", (new_status, paying_pay_id))
                     conn.commit()
                     st.session_state.pop("paying_pay_id", None)
                     st.success("Payment recorded.")
@@ -553,14 +555,14 @@ def render_credit_page(conn):
     # Payable delete confirm flow
     confirm_del_pay = st.session_state.get("confirm_del_pay_id")
     if confirm_del_pay:
-        del_p = conn.execute("SELECT vendor_name, amount FROM payables WHERE id=?", (confirm_del_pay,)).fetchone()
+        del_p = conn.execute("SELECT vendor_name, amount FROM payables WHERE id=%s", (confirm_del_pay,)).fetchone()
         if del_p:
-            st.warning(f"Delete payable to **{del_p['vendor_name']}** ({_inr(del_p['amount'])})? This also removes any payment records. Cannot be undone.")
+            st.warning(f"Delete payable to **{del_p['vendor_name']}** ({_inr(del_p['amount'])})%s This also removes any payment records. Cannot be undone.")
             dc3, dc4, _ = st.columns([1, 1, 8])
             with dc3:
                 if st.button("Yes, delete", key="conf_del_pay_yes", type="primary"):
-                    conn.execute("DELETE FROM payments WHERE type='payable' AND reference_id=?", (confirm_del_pay,))
-                    conn.execute("DELETE FROM payables WHERE id=?", (confirm_del_pay,))
+                    conn.execute("DELETE FROM payments WHERE type='payable' AND reference_id=%s", (confirm_del_pay,))
+                    conn.execute("DELETE FROM payables WHERE id=%s", (confirm_del_pay,))
                     conn.commit()
                     st.session_state.pop("confirm_del_pay_id", None)
                     st.rerun()
@@ -640,7 +642,7 @@ def render_credit_page(conn):
                     f"{_inr(pp['amount'])} · *{pp['date']}*"
                 )
                 pay_rows = conn.execute(
-                    "SELECT * FROM payments WHERE type='payable' AND reference_id=? "
+                    "SELECT * FROM payments WHERE type='payable' AND reference_id=%s "
                     "ORDER BY payment_date ASC",
                     (pp["id"],),
                 ).fetchall()

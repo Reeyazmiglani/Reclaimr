@@ -13,12 +13,12 @@ from utils.export import export_to_excel, export_to_pdf
 from utils.auth import require_auth, render_logout_button
 
 
-DB_PATH = os.getenv("DB_PATH", "db/erp.db")
+DATABASE_URL = os.getenv("DATABASE_URL")
 
 
 @st.cache_resource
 def _get_conn():
-    return init_db(Path(DB_PATH))
+    return init_db(DATABASE_URL)
 
 
 require_auth(_get_conn())
@@ -98,7 +98,7 @@ TABLE_CSS = (
 
 def _order_options(conn, company_id):
     rows = conn.execute(
-        "SELECT id, customer_name, product FROM orders WHERE company_id = ? ORDER BY id DESC",
+        "SELECT id, customer_name, product FROM orders WHERE company_id = %s ORDER BY id DESC",
         (company_id,),
     ).fetchall()
     opts = {"(None)": None}
@@ -109,7 +109,7 @@ def _order_options(conn, company_id):
 
 def _batch_options(conn, company_id):
     rows = conn.execute(
-        "SELECT id, batch_ref, date FROM production_logs WHERE company_id = ? ORDER BY date DESC, id DESC",
+        "SELECT id, batch_ref, date FROM production_logs WHERE company_id = %s ORDER BY date DESC, id DESC",
         (company_id,),
     ).fetchall()
     return {f"{r['batch_ref']} ({r['date']})": r["id"] for r in rows}
@@ -117,7 +117,7 @@ def _batch_options(conn, company_id):
 
 def _batch_allocations(conn, batch_id):
     rows = conn.execute(
-        "SELECT order_id, allocated_kg FROM batch_allocations WHERE batch_id = ?", (batch_id,)
+        "SELECT order_id, allocated_kg FROM batch_allocations WHERE batch_id = %s", (batch_id,)
     ).fetchall()
     return {r["order_id"]: r["allocated_kg"] for r in rows}
 
@@ -127,9 +127,9 @@ def _orders_linked_to_batch(conn, batch_id):
         """SELECT DISTINCT o.id, o.customer_name, o.product
            FROM orders o
            WHERE o.id IN (
-               SELECT order_id FROM batch_allocations WHERE batch_id = ?
+               SELECT order_id FROM batch_allocations WHERE batch_id = %s
                UNION
-               SELECT order_id FROM production_logs WHERE id = ? AND order_id IS NOT NULL
+               SELECT order_id FROM production_logs WHERE id = %s AND order_id IS NOT NULL
            )
            ORDER BY o.id DESC""",
         (batch_id, batch_id),
@@ -140,7 +140,7 @@ def _orders_linked_to_batch(conn, batch_id):
 def _latest_procurement_price(conn, company_id, item_keyword):
     row = conn.execute(
         """SELECT unit_cost FROM procurement
-           WHERE company_id = ? AND LOWER(item) LIKE LOWER(?) AND price_type = 'per_unit'
+           WHERE company_id = %s AND LOWER(item) LIKE LOWER(%s) AND price_type = 'per_unit'
            ORDER BY purchase_date DESC, id DESC LIMIT 1""",
         (company_id, f"%{item_keyword}%"),
     ).fetchone()
@@ -152,7 +152,7 @@ def _batch_revenue(conn, batch_id):
         """SELECT ba.allocated_kg, o.rate, o.rate_type
            FROM batch_allocations ba
            JOIN orders o ON ba.order_id = o.id
-           WHERE ba.batch_id = ?""",
+           WHERE ba.batch_id = %s""",
         (batch_id,),
     ).fetchall()
     if rows:
@@ -160,7 +160,7 @@ def _batch_revenue(conn, batch_id):
     row = conn.execute(
         """SELECT pl.output_kg, o.rate, o.rate_type
            FROM production_logs pl JOIN orders o ON pl.order_id = o.id
-           WHERE pl.id = ?""",
+           WHERE pl.id = %s""",
         (batch_id,),
     ).fetchone()
     if row:
@@ -196,14 +196,14 @@ def _inr(val):
 def _ensure_tables(conn):
     conn.executescript("""
         CREATE TABLE IF NOT EXISTS batch_allocations (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             batch_id INTEGER NOT NULL,
             order_id INTEGER NOT NULL,
             allocated_kg REAL NOT NULL,
-            created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+            created_at TEXT NOT NULL DEFAULT (to_char(now() AT TIME ZONE 'localtime', 'YYYY-MM-DD HH24:MI:SS'))
         );
         CREATE TABLE IF NOT EXISTS batch_complaints (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             batch_id INTEGER NOT NULL,
             order_id INTEGER,
             customer_name TEXT,
@@ -216,22 +216,22 @@ def _ensure_tables(conn):
             initial_action TEXT NOT NULL,
             logged_by TEXT NOT NULL,
             status TEXT NOT NULL DEFAULT 'open',
-            created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+            created_at TEXT NOT NULL DEFAULT (to_char(now() AT TIME ZONE 'localtime', 'YYYY-MM-DD HH24:MI:SS'))
         );
         CREATE TABLE IF NOT EXISTS batch_complaint_updates (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             complaint_id INTEGER NOT NULL,
             date TEXT NOT NULL,
             update_description TEXT NOT NULL,
             action_taken TEXT NOT NULL,
             status TEXT NOT NULL,
             logged_by TEXT NOT NULL,
-            created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+            created_at TEXT NOT NULL DEFAULT (to_char(now() AT TIME ZONE 'localtime', 'YYYY-MM-DD HH24:MI:SS'))
         );
         CREATE TABLE IF NOT EXISTS production_cost_edits (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             batch_id INTEGER NOT NULL,
-            edited_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+            edited_at TEXT NOT NULL DEFAULT (to_char(now() AT TIME ZONE 'localtime', 'YYYY-MM-DD HH24:MI:SS')),
             purple_cost REAL,
             wax_cost REAL,
             mc_cost REAL,
@@ -329,8 +329,8 @@ def render_production_page(conn):
     row = conn.execute(
         "SELECT COALESCE(SUM(output_kg),0), COALESCE(SUM(cartons_1kg),0), COALESCE(SUM(cartons_5kg),0), "
         "COALESCE(SUM(total_batch_cost),0) "
-        "FROM production_logs WHERE company_id = ? "
-        "AND strftime('%Y-%m', date) = strftime('%Y-%m', 'now', 'localtime')",
+        "FROM production_logs WHERE company_id = %s "
+        "AND to_char(date::date, 'YYYY-MM') = to_char(now() AT TIME ZONE 'localtime', 'YYYY-MM')",
         (company_id,),
     ).fetchone()
     c1, c2, c3, c4 = st.columns(4)
@@ -344,7 +344,7 @@ def render_production_page(conn):
     editing_id = st.session_state.get("editing_prod_id")
     if editing_id:
         entry = conn.execute(
-            "SELECT * FROM production_logs WHERE id = ?", (editing_id,)
+            "SELECT * FROM production_logs WHERE id = %s", (editing_id,)
         ).fetchone()
         if entry:
             st.subheader(f"Editing Entry #{editing_id}")
@@ -482,7 +482,7 @@ def render_production_page(conn):
 
             # Cost edit history (outside form)
             cost_edits = conn.execute(
-                "SELECT * FROM production_cost_edits WHERE batch_id = ? ORDER BY edited_at DESC",
+                "SELECT * FROM production_cost_edits WHERE batch_id = %s ORDER BY edited_at DESC",
                 (editing_id,),
             ).fetchall()
             if cost_edits:
@@ -529,18 +529,18 @@ def render_production_page(conn):
                         conn.execute(
                             "INSERT INTO production_cost_edits "
                             "(batch_id, purple_cost, wax_cost, mc_cost, overhead_cost, total_cost, cost_per_kg) "
-                            "VALUES (?,?,?,?,?,?,?)",
+                            "VALUES (%s,%s,%s,%s,%s,%s,%s)",
                             (editing_id, e_purple_cost, e_wax_cost, e_mc_cost, e_overhead,
                              e_total_cost_final, e_cpkg_final),
                         )
 
                     conn.execute(
-                        "UPDATE production_logs SET date=?, batch_ref=?, purple_material_kg=?, wax_kg=?, "
-                        "mc_kg=?, output_kg=?, machine_start=?, machine_end=?, run_time_minutes=?, "
-                        "bottles_1kg=?, bottles_5kg=?, cartons_1kg=?, cartons_5kg=?, rejections_kg=?, "
-                        "order_id=?, temperature_log=?, additional_notes=?, "
-                        "purple_material_cost=?, wax_cost=?, mc_cost=?, overhead_cost=?, "
-                        "total_batch_cost=?, cost_per_kg=? WHERE id=?",
+                        "UPDATE production_logs SET date=%s, batch_ref=%s, purple_material_kg=%s, wax_kg=%s, "
+                        "mc_kg=%s, output_kg=%s, machine_start=%s, machine_end=%s, run_time_minutes=%s, "
+                        "bottles_1kg=%s, bottles_5kg=%s, cartons_1kg=%s, cartons_5kg=%s, rejections_kg=%s, "
+                        "order_id=%s, temperature_log=%s, additional_notes=%s, "
+                        "purple_material_cost=%s, wax_cost=%s, mc_cost=%s, overhead_cost=%s, "
+                        "total_batch_cost=%s, cost_per_kg=%s WHERE id=%s",
                         (e_date.isoformat(), e_batch.strip(), e_purple, e_wax, e_mc, e_output,
                          e_start_str, e_end_str, e_run,
                          e_b1 or None, e_b5 or None, e_c1 or None, e_c5 or None,
@@ -552,13 +552,13 @@ def render_production_page(conn):
                          editing_id),
                     )
 
-                    conn.execute("DELETE FROM batch_allocations WHERE batch_id = ?", (editing_id,))
+                    conn.execute("DELETE FROM batch_allocations WHERE batch_id = %s", (editing_id,))
                     for ol in e_orders:
                         oid = non_none_order_opts.get(ol)
                         if oid:
                             alloc_kg = st.session_state.get(f"e_alloc_{oid}", existing_allocs.get(oid, 0.0))
                             conn.execute(
-                                "INSERT INTO batch_allocations (batch_id, order_id, allocated_kg) VALUES (?,?,?)",
+                                "INSERT INTO batch_allocations (batch_id, order_id, allocated_kg) VALUES (%s,%s,%s)",
                                 (editing_id, oid, float(alloc_kg)),
                             )
 
@@ -757,7 +757,7 @@ def render_production_page(conn):
         if linked_orders and total_batch_cost > 0:
             est_revenue = sum(
                 st.session_state.get(f"alloc_{order_opts[lo]}", 0.0) *
-                (conn.execute("SELECT rate FROM orders WHERE id = ?", (order_opts[lo],)).fetchone() or {"rate": 0})["rate"]
+                (conn.execute("SELECT rate FROM orders WHERE id = %s", (order_opts[lo],)).fetchone() or {"rate": 0})["rate"]
                 for lo in linked_orders
             )
             if est_revenue > 0:
@@ -835,7 +835,7 @@ def render_production_page(conn):
                 "output_kg, machine_start, machine_end, run_time_minutes, bottles_1kg, bottles_5kg, "
                 "cartons_1kg, cartons_5kg, rejections_kg, order_id, temperature_log, additional_notes, "
                 "purple_material_cost, wax_cost, mc_cost, overhead_cost, total_batch_cost, cost_per_kg) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
                 (company_id, prod_date.isoformat(), batch_ref.strip(),
                  purple_kg, wax_kg, mc_kg, output_kg,
                  start_str, end_str, run_time_mins,
@@ -847,14 +847,14 @@ def render_production_page(conn):
                  p_cost_save or None, w_cost_save or None, m_cost_save or None,
                  o_cost_save or None, total_save or None, cpkg_save or None),
             )
-            new_batch_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+            new_batch_id = conn.execute("SELECT lastval()").fetchone()[0]
 
             for lo in linked_orders_val:
                 oid = order_opts.get(lo)
                 if oid:
                     alloc_kg = st.session_state.get(f"alloc_{oid}", 0.0)
                     conn.execute(
-                        "INSERT INTO batch_allocations (batch_id, order_id, allocated_kg) VALUES (?,?,?)",
+                        "INSERT INTO batch_allocations (batch_id, order_id, allocated_kg) VALUES (%s,%s,%s)",
                         (new_batch_id, oid, float(alloc_kg)),
                     )
 
@@ -890,15 +890,15 @@ def render_production_page(conn):
     lsql = (
         "SELECT pl.*, o.product AS order_product, o.customer_name "
         "FROM production_logs pl LEFT JOIN orders o ON pl.order_id = o.id "
-        "WHERE pl.company_id = ?"
+        "WHERE pl.company_id = %s"
     )
     lqp = [company_id]
     if log_batch:
-        lsql += " AND pl.batch_ref LIKE ?"; lqp.append(f"%{log_batch}%")
+        lsql += " AND pl.batch_ref LIKE %s"; lqp.append(f"%{log_batch}%")
     if log_from:
-        lsql += " AND pl.date >= ?"; lqp.append(log_from.isoformat())
+        lsql += " AND pl.date >= %s"; lqp.append(log_from.isoformat())
     if log_to:
-        lsql += " AND pl.date <= ?"; lqp.append(log_to.isoformat())
+        lsql += " AND pl.date <= %s"; lqp.append(log_to.isoformat())
     lsql += " ORDER BY pl.date DESC, pl.created_at DESC"
 
     logs = conn.execute(lsql, lqp).fetchall()
@@ -936,7 +936,7 @@ def render_production_page(conn):
         rows_html = ""
         for lg in display_logs:
             alloc_count = conn.execute(
-                "SELECT COUNT(*) FROM batch_allocations WHERE batch_id = ?", (lg["id"],)
+                "SELECT COUNT(*) FROM batch_allocations WHERE batch_id = %s", (lg["id"],)
             ).fetchone()[0]
             if alloc_count > 1:
                 linked = f"{alloc_count} orders"
@@ -944,7 +944,7 @@ def render_production_page(conn):
                 if alloc_count == 1:
                     ar = conn.execute(
                         "SELECT o.product, o.customer_name FROM batch_allocations ba "
-                        "JOIN orders o ON ba.order_id = o.id WHERE ba.batch_id = ?", (lg["id"],)
+                        "JOIN orders o ON ba.order_id = o.id WHERE ba.batch_id = %s", (lg["id"],)
                     ).fetchone()
                     linked = f"{ar['product']} ({ar['customer_name']})" if ar else (f"{lg['order_product']} ({lg['customer_name']})" if lg["order_product"] else "—")
                 else:
@@ -985,15 +985,15 @@ def render_production_page(conn):
     confirm_del_id = st.session_state.get("confirm_del_prod_id")
     if confirm_del_id:
         del_row = conn.execute(
-            "SELECT id, batch_ref, date FROM production_logs WHERE id = ?", (confirm_del_id,)
+            "SELECT id, batch_ref, date FROM production_logs WHERE id = %s", (confirm_del_id,)
         ).fetchone()
         if del_row:
             st.warning(f"Delete entry #{del_row['id']}, {del_row['batch_ref']} on {del_row['date']}? Cannot be undone.")
             yc, nc, _ = st.columns([1, 1, 8])
             with yc:
                 if st.button("Yes, delete", type="primary"):
-                    conn.execute("DELETE FROM batch_allocations WHERE batch_id = ?", (confirm_del_id,))
-                    conn.execute("DELETE FROM production_logs WHERE id = ?", (confirm_del_id,))
+                    conn.execute("DELETE FROM batch_allocations WHERE batch_id = %s", (confirm_del_id,))
+                    conn.execute("DELETE FROM production_logs WHERE id = %s", (confirm_del_id,))
                     conn.commit()
                     st.session_state["confirm_del_prod_id"] = None
                     st.rerun()
@@ -1026,7 +1026,7 @@ def _render_cost_summary(conn, company_id):
                            ELSE NULL END
                   ) AS revenue
            FROM production_logs pl
-           WHERE pl.company_id = ? AND pl.total_batch_cost IS NOT NULL
+           WHERE pl.company_id = %s AND pl.total_batch_cost IS NOT NULL
            ORDER BY pl.date DESC, pl.id DESC""",
         (company_id,),
     ).fetchall()
@@ -1099,7 +1099,7 @@ def _render_complaints(conn, company_id):
         if st.session_state.get(_prev_key) != c_order_label:
             oid_sel = complaint_order_opts.get(c_order_label)
             if oid_sel:
-                orow = conn.execute("SELECT customer_name FROM orders WHERE id = ?", (oid_sel,)).fetchone()
+                orow = conn.execute("SELECT customer_name FROM orders WHERE id = %s", (oid_sel,)).fetchone()
                 st.session_state["c_customer"] = orow["customer_name"] if orow else ""
             else:
                 st.session_state["c_customer"] = ""
@@ -1145,7 +1145,7 @@ def _render_complaints(conn, company_id):
                     "INSERT INTO batch_complaints "
                     "(batch_id, order_id, customer_name, date, issue_type, description, "
                     "quantity_affected, physical_return, quantity_returned, initial_action, logged_by, status) "
-                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                    "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
                     (bid, oid, c_customer.strip() or None, c_date.isoformat(),
                      c_issue_type, c_desc.strip(),
                      c_qty_affected or None, int(c_physical),
@@ -1160,7 +1160,7 @@ def _render_complaints(conn, company_id):
         """SELECT bc.id, bc.date, bc.issue_type, bc.customer_name, pl.batch_ref, bc.status
            FROM batch_complaints bc
            JOIN production_logs pl ON bc.batch_id = pl.id
-           WHERE pl.company_id = ? AND bc.status != 'resolved'
+           WHERE pl.company_id = %s AND bc.status != 'resolved'
            ORDER BY bc.date DESC""",
         (company_id,),
     ).fetchall()
@@ -1192,10 +1192,10 @@ def _render_complaints(conn, company_id):
                     conn.execute(
                         "INSERT INTO batch_complaint_updates "
                         "(complaint_id, date, update_description, action_taken, status, logged_by) "
-                        "VALUES (?,?,?,?,?,?)",
+                        "VALUES (%s,%s,%s,%s,%s,%s)",
                         (cid, u_date.isoformat(), u_desc.strip(), u_action, u_status, u_logged_by.strip()),
                     )
-                    conn.execute("UPDATE batch_complaints SET status = ? WHERE id = ?", (u_status, cid))
+                    conn.execute("UPDATE batch_complaints SET status = %s WHERE id = %s", (u_status, cid))
                     conn.commit()
                     st.success("Update saved.")
                     st.rerun()
@@ -1208,7 +1208,7 @@ def _render_complaints(conn, company_id):
                   bc.initial_action, bc.logged_by, bc.status
            FROM batch_complaints bc
            JOIN production_logs pl ON bc.batch_id = pl.id
-           WHERE pl.company_id = ?
+           WHERE pl.company_id = %s
            ORDER BY bc.date DESC, bc.id DESC""",
         (company_id,),
     ).fetchall()
@@ -1248,7 +1248,7 @@ def _render_complaints(conn, company_id):
             )
 
             updates = conn.execute(
-                "SELECT * FROM batch_complaint_updates WHERE complaint_id = ? ORDER BY date ASC, created_at ASC",
+                "SELECT * FROM batch_complaint_updates WHERE complaint_id = %s ORDER BY date ASC, created_at ASC",
                 (c["id"],),
             ).fetchall()
             if updates:

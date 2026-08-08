@@ -10,12 +10,12 @@ from utils.auth import require_auth, render_logout_button
 
 load_dotenv()
 
-DB_PATH = os.getenv("DB_PATH", "db/erp.db")
+DATABASE_URL = os.getenv("DATABASE_URL")
 
 
 @st.cache_resource
 def _get_conn():
-    return init_db(Path(DB_PATH))
+    return init_db(DATABASE_URL)
 
 
 require_auth(_get_conn())
@@ -98,14 +98,14 @@ def _ensure_tables(conn):
     conn.executescript(
         """
         CREATE TABLE IF NOT EXISTS stock_adjustments (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             date TEXT NOT NULL,
             company_id INTEGER NOT NULL,
             item_type TEXT NOT NULL,
             item_name TEXT NOT NULL,
             adjustment_qty REAL NOT NULL,
             reason TEXT,
-            created_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+            created_at TEXT NOT NULL DEFAULT (to_char(now() AT TIME ZONE 'localtime', 'YYYY-MM-DD HH24:MI:SS')),
             FOREIGN KEY (company_id) REFERENCES companies(id)
         );
         """
@@ -122,7 +122,7 @@ def _raw_material_balances(conn, company_id):
     plus an 'Other / unmatched' bucket for procurement items that don't match
     Purple Material / Wax / MC (see RAW_MATERIALS)."""
     proc_rows = conn.execute(
-        "SELECT item, quantity FROM procurement WHERE company_id = ?", (company_id,)
+        "SELECT item, quantity FROM procurement WHERE company_id = %s", (company_id,)
     ).fetchall()
 
     known_norm = {_norm(m): m for m in RAW_MATERIALS}
@@ -138,7 +138,7 @@ def _raw_material_balances(conn, company_id):
 
     out_row = conn.execute(
         "SELECT COALESCE(SUM(purple_material_kg),0), COALESCE(SUM(wax_kg),0), "
-        "COALESCE(SUM(mc_kg),0) FROM production_logs WHERE company_id = ?",
+        "COALESCE(SUM(mc_kg),0) FROM production_logs WHERE company_id = %s",
         (company_id,),
     ).fetchone()
     out_totals = {
@@ -149,7 +149,7 @@ def _raw_material_balances(conn, company_id):
 
     adj_rows = conn.execute(
         "SELECT item_name, COALESCE(SUM(adjustment_qty),0) AS adj FROM stock_adjustments "
-        "WHERE company_id = ? AND item_type = 'raw_material' GROUP BY item_name",
+        "WHERE company_id = %s AND item_type = 'raw_material' GROUP BY item_name",
         (company_id,),
     ).fetchall()
     adj_map = {a["item_name"]: a["adj"] for a in adj_rows}
@@ -185,27 +185,27 @@ def _finished_goods_balance(conn, company_id):
     """
     in_row = conn.execute(
         "SELECT COALESCE(SUM(COALESCE(bottles_1kg,0)*1 + COALESCE(bottles_5kg,0)*5),0) "
-        "FROM production_logs WHERE company_id = ?",
+        "FROM production_logs WHERE company_id = %s",
         (company_id,),
     ).fetchone()
     in_kg = in_row[0]
 
     out_row = conn.execute(
         "SELECT COALESCE(SUM(quantity),0) FROM orders "
-        "WHERE company_id = ? AND status = 'dispatched' AND quantity_unit = 'kg'",
+        "WHERE company_id = %s AND status = 'dispatched' AND quantity_unit = 'kg'",
         (company_id,),
     ).fetchone()
     out_kg = out_row[0]
 
     non_kg = conn.execute(
         "SELECT id, customer_name, product, quantity, quantity_unit FROM orders "
-        "WHERE company_id = ? AND status = 'dispatched' AND quantity_unit != 'kg'",
+        "WHERE company_id = %s AND status = 'dispatched' AND quantity_unit != 'kg'",
         (company_id,),
     ).fetchall()
 
     adj_row = conn.execute(
         "SELECT COALESCE(SUM(adjustment_qty),0) FROM stock_adjustments "
-        "WHERE company_id = ? AND item_type = 'finished_good'",
+        "WHERE company_id = %s AND item_type = 'finished_good'",
         (company_id,),
     ).fetchone()
     adj_kg = adj_row[0]
@@ -351,7 +351,7 @@ def render_inventory_page(conn):
         else:
             conn.execute(
                 "INSERT INTO stock_adjustments (date, company_id, item_type, item_name, "
-                "adjustment_qty, reason) VALUES (?, ?, ?, ?, ?, ?)",
+                "adjustment_qty, reason) VALUES (%s, %s, %s, %s, %s, %s)",
                 (adj_date.isoformat(), company_id, item_type, item_name,
                  adjustment_qty, reason.strip() or None),
             )
@@ -362,7 +362,7 @@ def render_inventory_page(conn):
     st.markdown("**Recent adjustments**")
     adj_history = conn.execute(
         "SELECT date, item_type, item_name, adjustment_qty, reason, created_at "
-        "FROM stock_adjustments WHERE company_id = ? ORDER BY date DESC, id DESC LIMIT 20",
+        "FROM stock_adjustments WHERE company_id = %s ORDER BY date DESC, id DESC LIMIT 20",
         (company_id,),
     ).fetchall()
     if not adj_history:

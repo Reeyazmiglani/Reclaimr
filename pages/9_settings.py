@@ -1,10 +1,8 @@
 import os
 import io
-import sqlite3
 import streamlit as st
 import pandas as pd
 from datetime import datetime
-from pathlib import Path
 from dotenv import load_dotenv
 from db.schema import init_db
 from utils.settings import (
@@ -20,12 +18,12 @@ from utils.auth import (
 
 load_dotenv()
 
-DB_PATH = os.getenv("DB_PATH", "db/erp.db")
+DATABASE_URL = os.getenv("DATABASE_URL")
 
 
 @st.cache_resource
 def _get_conn():
-    return init_db(Path(DB_PATH))
+    return init_db(DATABASE_URL)
 
 
 require_auth(_get_conn())
@@ -241,30 +239,21 @@ def render_settings_page(conn):
     # ══════════════════════════════════════════════════════════════════════
     st.subheader("Data Management")
 
-    db_path = Path(DB_PATH)
-    tables = [r[0] for r in conn.execute(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
+    tables = [r["table_name"] for r in conn.execute(
+        "SELECT table_name FROM information_schema.tables "
+        "WHERE table_schema = 'public' ORDER BY table_name"
     ).fetchall()]
     counts = []
     for t in tables:
         try:
             n = conn.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0]
-        except sqlite3.OperationalError:
+        except Exception:
             n = None
         counts.append({"Table": t, "Rows": n})
 
-    last_updated = datetime.fromtimestamp(db_path.stat().st_mtime).strftime("%d %b %Y, %H:%M") if db_path.exists() else "—"
-    st.caption(f"Database file last modified: **{last_updated}**")
     st.dataframe(pd.DataFrame(counts), use_container_width=True, hide_index=True)
-
-    if db_path.exists():
-        with open(db_path, "rb") as f:
-            db_bytes = f.read()
-        st.download_button(
-            "⬇ Download full backup (.db)",
-            data=db_bytes,
-            file_name=f"reclaimr_backup_{datetime.now().strftime('%Y%m%d_%H%M')}.db",
-            mime="application/octet-stream",
-        )
-    else:
-        st.warning("Database file not found on disk.")
+    st.caption(
+        "Running on PostgreSQL — use Railway's own backup/snapshot tools "
+        "(or `pg_dump`) for a full database backup; the old local-file "
+        "download isn't applicable now that data lives in Postgres."
+    )

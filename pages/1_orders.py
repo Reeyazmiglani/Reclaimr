@@ -13,12 +13,12 @@ from utils.settings import get_company_details
 from utils.auth import require_auth, render_logout_button
 
 
-DB_PATH = os.getenv("DB_PATH", "db/erp.db")
+DATABASE_URL = os.getenv("DATABASE_URL")
 
 
 @st.cache_resource
 def _get_conn():
-    return init_db(Path(DB_PATH))
+    return init_db(DATABASE_URL)
 
 
 require_auth(_get_conn())
@@ -192,7 +192,7 @@ def render_orders_page(conn):
         elif action == "del" and order_id:
             st.session_state["confirm_delete_id"] = order_id
         elif action == "complete" and order_id:
-            conn.execute("UPDATE orders SET status='dispatched' WHERE id=?", (order_id,))
+            conn.execute("UPDATE orders SET status='dispatched' WHERE id=%s", (order_id,))
             conn.commit()
         st.query_params.clear()
         st.rerun()
@@ -202,7 +202,7 @@ def render_orders_page(conn):
     if editing_id:
         order = conn.execute(
             "SELECT o.*, c.name AS company_name FROM orders o "
-            "JOIN companies c ON o.company_id = c.id WHERE o.id = ?",
+            "JOIN companies c ON o.company_id = c.id WHERE o.id = %s",
             (editing_id,),
         ).fetchone()
 
@@ -296,14 +296,14 @@ def render_orders_page(conn):
                     st.error("Customer name and product are required.")
                 else:
                     company_row = conn.execute(
-                        "SELECT id FROM companies WHERE name = ?", (company,)
+                        "SELECT id FROM companies WHERE name = %s", (company,)
                     ).fetchone()
                     new_batch_ref = _resolve_batch_ref(e_batch_sel, e_batch_manual, e_b_label_to_ref)
                     conn.execute(
-                        "UPDATE orders SET company_id=?, customer_name=?, product=?, "
-                        "quantity=?, quantity_unit=?, rate=?, rate_type=?, "
-                        "expected_dispatch_date=?, batch_reference=?, status=?, "
-                        "transport_via=?, dispatch_time=?, delivery_deadline=?, notes=? WHERE id=?",
+                        "UPDATE orders SET company_id=%s, customer_name=%s, product=%s, "
+                        "quantity=%s, quantity_unit=%s, rate=%s, rate_type=%s, "
+                        "expected_dispatch_date=%s, batch_reference=%s, status=%s, "
+                        "transport_via=%s, dispatch_time=%s, delivery_deadline=%s, notes=%s WHERE id=%s",
                         (
                             company_row["id"], customer_name.strip(), product.strip(),
                             quantity, quantity_unit, rate, RATE_TYPE_TO_DB[rate_type_label],
@@ -431,7 +431,7 @@ def render_orders_page(conn):
             st.error("Customer name and product are required.")
         else:
             company_row = conn.execute(
-                "SELECT id FROM companies WHERE name = ?", (company,)
+                "SELECT id FROM companies WHERE name = %s", (company,)
             ).fetchone()
             if company_row is None:
                 st.error(f"Company '{company}' not found in the database.")
@@ -441,7 +441,7 @@ def render_orders_page(conn):
                     "INSERT INTO orders (company_id, customer_name, product, quantity, "
                     "quantity_unit, rate, rate_type, expected_dispatch_date, batch_reference, "
                     "transport_via, dispatch_time, delivery_deadline, notes) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
                     (
                         company_row["id"], customer_name.strip(), product.strip(),
                         quantity, quantity_unit, rate, RATE_TYPE_TO_DB[rate_type_label],
@@ -494,17 +494,17 @@ def render_orders_page(conn):
     )
     qp = []
     if search_customer:
-        sql += " AND o.customer_name LIKE ?"; qp.append(f"%{search_customer}%")
+        sql += " AND o.customer_name LIKE %s"; qp.append(f"%{search_customer}%")
     if search_product:
-        sql += " AND o.product LIKE ?";       qp.append(f"%{search_product}%")
+        sql += " AND o.product LIKE %s";       qp.append(f"%{search_product}%")
     if filter_company != "All":
-        sql += " AND c.name = ?";             qp.append(filter_company)
+        sql += " AND c.name = %s";             qp.append(filter_company)
     if filter_status != "All":
-        sql += " AND o.status = ?";           qp.append(filter_status)
+        sql += " AND o.status = %s";           qp.append(filter_status)
     if filter_from:
-        sql += " AND o.expected_dispatch_date >= ?"; qp.append(filter_from.isoformat())
+        sql += " AND o.expected_dispatch_date >= %s"; qp.append(filter_from.isoformat())
     if filter_to:
-        sql += " AND o.expected_dispatch_date <= ?"; qp.append(filter_to.isoformat())
+        sql += " AND o.expected_dispatch_date <= %s"; qp.append(filter_to.isoformat())
     sql += " ORDER BY o.expected_dispatch_date ASC"
 
     orders = conn.execute(sql, qp).fetchall()
@@ -613,7 +613,7 @@ def render_orders_page(conn):
                 st.rerun()
 
             if new_status != o["status"]:
-                conn.execute("UPDATE orders SET status=? WHERE id=?", (new_status, o["id"]))
+                conn.execute("UPDATE orders SET status=%s WHERE id=%s", (new_status, o["id"]))
                 conn.commit()
                 st.rerun()
 
@@ -648,7 +648,7 @@ def render_orders_page(conn):
     confirm_delete_id = st.session_state.get("confirm_delete_id")
     if confirm_delete_id:
         row = conn.execute(
-            "SELECT id, customer_name, product FROM orders WHERE id = ?",
+            "SELECT id, customer_name, product FROM orders WHERE id = %s",
             (confirm_delete_id,),
         ).fetchone()
         if row:
@@ -659,7 +659,7 @@ def render_orders_page(conn):
             yes_col, no_col, _ = st.columns([1, 1, 8])
             with yes_col:
                 if st.button("Yes, delete", type="primary"):
-                    conn.execute("DELETE FROM orders WHERE id = ?", (confirm_delete_id,))
+                    conn.execute("DELETE FROM orders WHERE id = %s", (confirm_delete_id,))
                     conn.commit()
                     st.session_state["confirm_delete_id"] = None
                     st.rerun()

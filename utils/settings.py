@@ -20,13 +20,13 @@ DEFAULT_COMPANY_DETAILS = {
 
 
 def get_setting(conn, key: str, default: str = "") -> str:
-    row = conn.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
+    row = conn.execute("SELECT value FROM settings WHERE key = %s", (key,)).fetchone()
     return row["value"] if row and row["value"] is not None else default
 
 
 def set_setting(conn, key: str, value: str) -> None:
     conn.execute(
-        "INSERT INTO settings (key, value) VALUES (?, ?) "
+        "INSERT INTO settings (key, value) VALUES (%s, %s) "
         "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
         (key, value),
     )

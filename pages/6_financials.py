@@ -13,12 +13,12 @@ from utils.auth import require_auth, render_logout_button
 
 load_dotenv()
 
-DB_PATH = os.getenv("DB_PATH", "db/erp.db")
+DATABASE_URL = os.getenv("DATABASE_URL")
 
 
 @st.cache_resource
 def _get_conn():
-    return init_db(Path(DB_PATH))
+    return init_db(DATABASE_URL)
 
 
 require_auth(_get_conn())
@@ -273,7 +273,7 @@ def _render_stmt_card(title: str, rows: list, accent: str = _BLUE) -> None:
 def _ensure_tables(conn) -> None:
     conn.executescript("""
         CREATE TABLE IF NOT EXISTS monthly_updates (
-            id                INTEGER PRIMARY KEY AUTOINCREMENT,
+            id                SERIAL PRIMARY KEY,
             month             TEXT NOT NULL UNIQUE,
             rwox_sales        REAL DEFAULT 0,
             elastohorse_sales REAL DEFAULT 0,
@@ -282,7 +282,7 @@ def _ensure_tables(conn) -> None:
             expenses_json     TEXT,
             big_payments_json TEXT,
             notes             TEXT,
-            created_at        TEXT DEFAULT (datetime('now','localtime'))
+            created_at        TEXT DEFAULT (to_char(now() AT TIME ZONE 'localtime', 'YYYY-MM-DD HH24:MI:SS'))
         );
     """)
     conn.commit()
@@ -671,7 +671,7 @@ def _tab_monthly(conn, company: str, kp: str) -> None:
             """INSERT INTO monthly_updates
                (month,rwox_sales,elastohorse_sales,rwox_cash,elastohorse_cash,
                 expenses_json,big_payments_json,notes)
-               VALUES (?,?,?,?,?,?,?,?)
+               VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
                ON CONFLICT(month) DO UPDATE SET
                  rwox_sales=excluded.rwox_sales,
                  elastohorse_sales=excluded.elastohorse_sales,
@@ -917,12 +917,12 @@ def _tab_upload(conn, kp: str, default_company: str = "Rwox") -> None:
                 save_btn  = st.form_submit_button("Save to Database", type="primary")
 
             if save_btn:
-                row = conn.execute("SELECT id FROM companies WHERE name=?", (co_choice,)).fetchone()
+                row = conn.execute("SELECT id FROM companies WHERE name=%s", (co_choice,)).fetchone()
                 if row:
                     conn.execute(
                         "INSERT INTO financial_snapshots "
                         "(company_id,snapshot_date,cash_balance,receivables,payables,equity,notes) "
-                        "VALUES (?,?,?,?,?,?,?)",
+                        "VALUES (%s,%s,%s,%s,%s,%s,%s)",
                         (row["id"], snap_date.isoformat(), cash_in, recv, pay, eq, doc_notes))
                     conn.commit()
                     st.success(f"Snapshot saved for {co_choice} as of {snap_date}.")
