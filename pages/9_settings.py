@@ -14,6 +14,8 @@ from utils.settings import (
 from utils.auth import (
     require_auth, render_logout_button,
     get_pending_users, get_all_users, approve_user, remove_user,
+    get_pending_whatsapp_numbers, get_all_whatsapp_numbers,
+    approve_whatsapp_number, remove_whatsapp_number,
 )
 
 load_dotenv()
@@ -132,6 +134,39 @@ def render_settings_page(conn):
                 uc2.write("")
                 if u["role"] != "owner" and uc3.button("🗑 Remove", key=f"remove_{u['id']}"):
                     remove_user(conn, u["id"])
+                    st.rerun()
+
+        st.markdown("**WhatsApp numbers**")
+        pending_wa = get_pending_whatsapp_numbers(conn)
+        if pending_wa:
+            st.markdown(f"**{len(pending_wa)} pending WhatsApp {'request' if len(pending_wa)==1 else 'requests'}**")
+            for p in pending_wa:
+                wc1, wc2, wc3 = st.columns([3, 1, 1])
+                label = p["display_name"] or "(no name)"
+                wc1.write(f"{label} (`{p['phone_number']}`) — messaged {p['created_at']}")
+                if wc2.button("✅ Approve", key=f"wa_approve_{p['id']}"):
+                    approve_whatsapp_number(conn, p["id"], user.get("id"))
+                    st.success(f"Approved {p['phone_number']}.")
+                    st.rerun()
+                if wc3.button("🗑 Reject", key=f"wa_reject_{p['id']}"):
+                    remove_whatsapp_number(conn, p["id"])
+                    st.info(f"Rejected {p['phone_number']}.")
+                    st.rerun()
+        else:
+            st.caption("No pending WhatsApp requests.")
+
+        with st.expander("All WhatsApp numbers"):
+            all_wa = get_all_whatsapp_numbers(conn)
+            if not all_wa:
+                st.caption("No WhatsApp numbers on file yet.")
+            for n in all_wa:
+                nc1, nc2, nc3 = st.columns([3, 1, 1])
+                label = n["display_name"] or "(no name)"
+                nc1.write(f"{label} (`{n['phone_number']}`)"
+                          + ("" if n["approved"] else " · pending"))
+                nc2.write("")
+                if nc3.button("🗑 Remove", key=f"wa_remove_{n['id']}"):
+                    remove_whatsapp_number(conn, n["id"])
                     st.rerun()
 
         st.divider()

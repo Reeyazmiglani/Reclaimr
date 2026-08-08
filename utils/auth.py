@@ -103,6 +103,55 @@ def remove_user(conn, user_id: int):
     conn.commit()
 
 
+def _ensure_whatsapp_numbers_table(conn):
+    """Mirrors whatsapp_bot/db.py's DDL for the same table — both the web
+    app (Settings page approve/reject) and the bot service (auto-inserting
+    a pending row for an unrecognized sender) touch this table, so it's
+    created lazily from either side."""
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS whatsapp_numbers (
+            id SERIAL PRIMARY KEY,
+            phone_number TEXT NOT NULL UNIQUE,
+            display_name TEXT,
+            approved BOOLEAN NOT NULL DEFAULT FALSE,
+            added_by INTEGER REFERENCES users(id),
+            created_at TEXT NOT NULL DEFAULT to_char(now() AT TIME ZONE 'localtime', 'YYYY-MM-DD HH24:MI:SS')
+        )
+        """
+    )
+    conn.commit()
+
+
+def get_pending_whatsapp_numbers(conn):
+    _ensure_whatsapp_numbers_table(conn)
+    return conn.execute(
+        "SELECT id, phone_number, display_name, created_at FROM whatsapp_numbers "
+        "WHERE approved=FALSE ORDER BY created_at"
+    ).fetchall()
+
+
+def get_all_whatsapp_numbers(conn):
+    _ensure_whatsapp_numbers_table(conn)
+    return conn.execute(
+        "SELECT id, phone_number, display_name, approved, created_at FROM whatsapp_numbers "
+        "ORDER BY created_at"
+    ).fetchall()
+
+
+def approve_whatsapp_number(conn, row_id: int, approved_by_user_id=None):
+    conn.execute(
+        "UPDATE whatsapp_numbers SET approved=TRUE, added_by=%s WHERE id=%s",
+        (approved_by_user_id, row_id),
+    )
+    conn.commit()
+
+
+def remove_whatsapp_number(conn, row_id: int):
+    conn.execute("DELETE FROM whatsapp_numbers WHERE id=%s", (row_id,))
+    conn.commit()
+
+
 def _build_credentials(conn):
     """Only approved users are logins-eligible; a stale cookie for someone
     who was removed or un-approved since simply won't match here."""
