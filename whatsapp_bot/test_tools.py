@@ -9,9 +9,15 @@ since the data is live/production — eyeball the output against what you
 know is true in the app.
 """
 import os
+import sys
 from dotenv import load_dotenv
 
 load_dotenv()
+
+# Windows consoles default to cp1252, which can't print the ₹ sign used in
+# revenue-summary output — force UTF-8 so this runs without extra setup.
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
 
 import db
 import tools
@@ -72,7 +78,31 @@ def test_write_confirmation_flow(conn):
         print(f"customer '{row['customer_name']}' -> {len(matches)} matches (should ask to clarify, not guess)")
         assert len(matches) > 1
     else:
-        print("(no customer with multiple orders found — skipping ambiguous-match check)")
+        # No existing customer happens to have 2+ orders — insert two
+        # temporary rows under a throwaway name so the ambiguous-match
+        # path (find matches -> clarify, not guess) is still exercised
+        # against the real schema, then clean up.
+        print("(no customer with multiple orders found — inserting a temporary pair to test the path)")
+        test_customer = "__wa_bot_test_customer__"
+        company_id = conn.execute("SELECT id FROM companies LIMIT 1").fetchone()["id"]
+        conn.execute(
+            "INSERT INTO orders (company_id, customer_name, product, quantity, quantity_unit, rate, "
+            "expected_dispatch_date, status, created_at) "
+            "VALUES (%s,%s,'Test Product A',10,'kg',0,CURRENT_DATE,'received', now()), "
+            "(%s,%s,'Test Product B',20,'kg',0,CURRENT_DATE,'received', now())",
+            (company_id, test_customer, company_id, test_customer),
+        )
+        conn.commit()
+        try:
+            matches = tools.find_orders_for_status_update(conn, customer_name=test_customer)
+            print(f"customer '{test_customer}' -> {len(matches)} matches (should ask to clarify, not guess)")
+            assert len(matches) == 2
+            reply = bot_main.handle_message(conn, "+910000000001",
+                                             f"mark {test_customer}'s order as dispatched")
+            print("Bot reply to ambiguous write request:", reply)
+        finally:
+            conn.execute("DELETE FROM orders WHERE customer_name=%s", (test_customer,))
+            conn.commit()
 
     print("\n=== write-confirmation flow: single match -> store -> confirm ===")
     single = conn.execute("SELECT id, customer_name, product FROM orders LIMIT 1").fetchone()
