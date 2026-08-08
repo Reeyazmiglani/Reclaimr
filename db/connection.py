@@ -46,6 +46,15 @@ class _Cursor(psycopg2.extras.DictCursorBase):
 class PgConnection:
     def __init__(self, dsn: str):
         self._conn = psycopg2.connect(dsn, cursor_factory=_Cursor)
+        # Autocommit, matching sqlite3's behavior this codebase was written
+        # against: each statement succeeds or fails independently. Without
+        # this, Postgres aborts the *entire* transaction on any single
+        # failed statement — and this app has many
+        # `try: conn.execute(ALTER TABLE ...) except: pass` spots (expected
+        # to be harmless probes under SQLite) that would otherwise poison
+        # every later query on the same (st.cache_resource-cached, so
+        # long-lived) connection with "current transaction is aborted".
+        self._conn.autocommit = True
 
     def execute(self, sql, params=None):
         cur = self._conn.cursor()
