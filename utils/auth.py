@@ -20,6 +20,10 @@ import streamlit_authenticator as stauth
 from streamlit_authenticator.utilities.exceptions import LoginError
 
 COOKIE_NAME = os.getenv("AUTH_COOKIE_NAME", "reclaimr_auth")
+# This is a sliding window, not a fixed one — restore_session() re-issues the
+# cookie with a fresh expiry on every visit while it's still valid, so an
+# active user stays logged in indefinitely and only gets signed out after
+# this many days of *no* visits at all.
 COOKIE_EXPIRY_DAYS = 30
 
 
@@ -212,11 +216,18 @@ def restore_session(conn):
     """Silently restores a persistent session from the streamlit-authenticator
     cookie if one is present and still valid (unexpired, names an approved
     user). Returns the user dict, or None if nobody is logged in. Never
-    stops the script — callers decide what to do about a None result."""
+    stops the script — callers decide what to do about a None result.
+
+    Re-issues the cookie with a fresh COOKIE_EXPIRY_DAYS-day expiry on every
+    successful restore, turning the fixed expiry into a sliding one: a user
+    who keeps visiting stays logged in indefinitely, and only gets signed
+    out after COOKIE_EXPIRY_DAYS days with *no* visits at all."""
     authenticator = _get_authenticator(conn)
     if not st.session_state.get("authentication_status"):
         try:
             authenticator.login(location="unrendered")
+            if st.session_state.get("authentication_status"):
+                authenticator.cookie_controller.set_cookie()
         except LoginError:
             # Cookie names a user who is no longer approved/exists — treat as logged out.
             authenticator.cookie_controller.delete_cookie()
