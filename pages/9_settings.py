@@ -145,7 +145,13 @@ def render_settings_page(conn):
                 label = p["display_name"] or "(no name)"
                 wc1.write(f"{label} (`{p['phone_number']}`) — messaged {p['created_at']}")
                 if wc2.button("✅ Approve", key=f"wa_approve_{p['id']}"):
-                    approve_whatsapp_number(conn, p["id"], user.get("id"))
+                    # auth is currently disabled (see utils/auth.py's
+                    # _AUTH_DISABLED_USER), so the "logged in" user is a
+                    # sentinel with id=0 that doesn't exist in `users` —
+                    # passing it as added_by trips the FK constraint. `or
+                    # None` maps that falsy sentinel id to NULL; a real
+                    # user id (once auth is re-enabled) passes through.
+                    approve_whatsapp_number(conn, p["id"], user.get("id") or None)
                     st.success(f"Approved {p['phone_number']}.")
                     st.rerun()
                 if wc3.button("🗑 Reject", key=f"wa_reject_{p['id']}"):
