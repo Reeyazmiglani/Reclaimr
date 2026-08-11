@@ -17,6 +17,7 @@ from utils.auth import (
     get_pending_whatsapp_numbers, get_all_whatsapp_numbers,
     approve_whatsapp_number, remove_whatsapp_number,
 )
+from utils.responsive_css import RESPONSIVE_CSS
 
 load_dotenv()
 
@@ -99,6 +100,7 @@ COMPANIES = ["Rwox", "Elastohorse"]
 
 def render_settings_page(conn):
     st.markdown(_DARK_CSS if st.session_state.get("dark_mode") else _WARM_CSS, unsafe_allow_html=True)
+    st.markdown(RESPONSIVE_CSS, unsafe_allow_html=True)
     st.header("Settings")
     st.caption("Most settings below are shared app-wide; the Team & Access section is per-account.")
 

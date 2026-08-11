@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 from db.schema import init_db
 from utils.settings import get_overdue_days
 from utils.auth import require_auth, render_logout_button
+from utils.responsive_css import RESPONSIVE_CSS
 
 load_dotenv()
 
@@ -302,6 +303,7 @@ _LOGO_HTML = (
 
 def render_intelligence_page(conn):
     st.markdown(_DARK_CSS if st.session_state.get("dark_mode") else _WARM_CSS, unsafe_allow_html=True)
+    st.markdown(RESPONSIVE_CSS, unsafe_allow_html=True)
     _ensure_tables(conn)
     today = date.today()
     now_str = datetime.now().strftime("%H:%M")

@@ -7,6 +7,7 @@ import math
 from dotenv import load_dotenv
 from db.schema import init_db
 from utils.auth import require_auth, render_logout_button
+from utils.responsive_css import RESPONSIVE_CSS
 
 load_dotenv()
 
@@ -1081,6 +1082,7 @@ _LOGO_HTML = (
 def render_forecasting_page(conn) -> None:
     _dark = st.session_state.get("dark_mode", False)
     st.markdown(_DARK_CSS if _dark else _WARM_CSS, unsafe_allow_html=True)
+    st.markdown(RESPONSIVE_CSS, unsafe_allow_html=True)
     global _PLOT
     _PLOT = dict(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
                  font_color="#F5E6D3" if _dark else "#2C2218", margin=dict(t=45, b=30, l=10, r=10))

@@ -10,6 +10,7 @@ from db.schema import init_db
 from utils.voice import transcribe_audio
 from utils.export import export_to_excel, export_to_pdf
 from utils.auth import require_auth, render_logout_button
+from utils.responsive_css import RESPONSIVE_CSS
 
 
 DATABASE_URL = os.getenv("DATABASE_URL")
@@ -145,6 +146,7 @@ _LOGO_HTML = (
 
 def render_procurement_page(conn):
     st.markdown(_DARK_CSS if st.session_state.get("dark_mode") else _WARM_CSS, unsafe_allow_html=True)
+    st.markdown(RESPONSIVE_CSS, unsafe_allow_html=True)
     st.header("Procurement")
     st.caption("Log purchases as they happen and build a price history that tells you when a vendor is overcharging.")
 

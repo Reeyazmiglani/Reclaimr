@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 from db.schema import init_db
 from utils.settings import get_dark_mode, set_dark_mode
 from utils.auth import restore_session, render_login_signup, render_logout_button, require_auth
+from utils.responsive_css import RESPONSIVE_CSS
 
 load_dotenv()
 
@@ -143,6 +144,7 @@ _LOGO_HTML = (
 )
 _dark = st.session_state.get("dark_mode", False)
 st.markdown(_DARK_CSS if _dark else _LIGHT_CSS, unsafe_allow_html=True)
+st.markdown(RESPONSIVE_CSS, unsafe_allow_html=True)
 
 # ── Navigation ─────────────────────────────────────────────────────────────────
 # Settings isn't in the main sidebar list — it's reached via the small gear

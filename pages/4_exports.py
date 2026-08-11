@@ -5,6 +5,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from db.schema import init_db
 from utils.auth import require_auth, render_logout_button
+from utils.responsive_css import RESPONSIVE_CSS
 
 load_dotenv()
 
@@ -136,6 +137,7 @@ _LOGO_HTML = (
 
 def render_exports_page(conn):
     st.markdown(_DARK_CSS if st.session_state.get("dark_mode") else _WARM_CSS, unsafe_allow_html=True)
+    st.markdown(RESPONSIVE_CSS, unsafe_allow_html=True)
     st.header("Exports")
     st.caption("International orders tracked separately, currencies, shipping terms, and margins all in one place.")
     this_month = date.today().strftime("%Y-%m")
