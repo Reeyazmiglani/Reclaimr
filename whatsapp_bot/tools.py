@@ -9,6 +9,7 @@ import json
 from datetime import datetime, timedelta
 
 PENDING_ACTION_TTL_MINUTES = 5
+CONTEXT_TTL_MINUTES = 5
 
 # ─────────────────────────────────────────────────────────────────────────
 # FY25 figures — duplicated from pages/6_financials.py's hardcoded FY25
@@ -36,22 +37,45 @@ def _inr(n):
 # READ TOOLS — execute immediately, no confirmation
 # ─────────────────────────────────────────────────────────────────────────
 
-def get_order_status(conn, customer_name: str) -> str:
-    rows = conn.execute(
+def _format_order_line(r) -> str:
+    return (
+        f"Order #{r['id']} — {r['customer_name']}: {r['quantity']} {r['quantity_unit']} "
+        f"{r['product']}, status: {r['status']}, expected dispatch: {r['expected_dispatch_date']}"
+    )
+
+
+def find_orders_by_customer(conn, customer_name: str, limit: int = 5):
+    """Returns raw order rows for a customer_name match — shared by the
+    formatted get_order_status reply and by context-capture in groq_agent."""
+    return conn.execute(
         "SELECT id, customer_name, product, quantity, quantity_unit, status, "
         "expected_dispatch_date FROM orders WHERE customer_name ILIKE %s "
-        "ORDER BY created_at DESC LIMIT 5",
+        f"ORDER BY created_at DESC LIMIT {int(limit)}",
         (f"%{customer_name}%",),
     ).fetchall()
+
+
+def get_order_by_id(conn, order_id: int):
+    """Returns the raw order row for a specific order number, or None."""
+    return conn.execute(
+        "SELECT id, customer_name, product, quantity, quantity_unit, status, "
+        "expected_dispatch_date FROM orders WHERE id=%s",
+        (order_id,),
+    ).fetchone()
+
+
+def get_order_status(conn, customer_name: str) -> str:
+    rows = find_orders_by_customer(conn, customer_name)
     if not rows:
         return f"No orders found for a customer matching '{customer_name}'."
-    lines = []
-    for r in rows:
-        lines.append(
-            f"Order #{r['id']} — {r['customer_name']}: {r['quantity']} {r['quantity_unit']} "
-            f"{r['product']}, status: {r['status']}, expected dispatch: {r['expected_dispatch_date']}"
-        )
-    return "\n".join(lines)
+    return "\n".join(_format_order_line(r) for r in rows)
+
+
+def get_order_status_by_id(conn, order_id: int) -> str:
+    row = get_order_by_id(conn, order_id)
+    if not row:
+        return f"No order found with number #{order_id}."
+    return _format_order_line(row)
 
 
 def get_vendor_price_history(conn, vendor: str, material: str) -> str:
@@ -262,6 +286,44 @@ def get_pending_action(conn, phone_number: str):
 
 def clear_pending_action(conn, phone_number: str):
     conn.execute("DELETE FROM whatsapp_pending_actions WHERE phone_number=%s", (phone_number,))
+    conn.commit()
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Short-term conversational context ("that order", "it", "the same one")
+# ─────────────────────────────────────────────────────────────────────────
+
+def store_context(conn, phone_number: str, last_order_id: int = None, last_customer_name: str = None):
+    """Remembers the last order/customer discussed with this phone number,
+    with a short expiry — same pattern as store_pending_action. Only call
+    this with at least one of the two set; both None is a no-op."""
+    if last_order_id is None and not last_customer_name:
+        return
+    conn.execute("DELETE FROM whatsapp_context WHERE phone_number=%s", (phone_number,))
+    expires_at = datetime.utcnow() + timedelta(minutes=CONTEXT_TTL_MINUTES)
+    conn.execute(
+        "INSERT INTO whatsapp_context (phone_number, last_order_id, last_customer_name, expires_at) "
+        "VALUES (%s, %s, %s, %s)",
+        (phone_number, last_order_id, last_customer_name, expires_at),
+    )
+    conn.commit()
+
+
+def get_context(conn, phone_number: str):
+    row = conn.execute(
+        "SELECT last_order_id, last_customer_name FROM whatsapp_context "
+        "WHERE phone_number=%s AND expires_at > now() ORDER BY created_at DESC LIMIT 1",
+        (phone_number,),
+    ).fetchone()
+    if not row:
+        return None
+    if row["last_order_id"] is None and not row["last_customer_name"]:
+        return None
+    return {"last_order_id": row["last_order_id"], "last_customer_name": row["last_customer_name"]}
+
+
+def clear_context(conn, phone_number: str):
+    conn.execute("DELETE FROM whatsapp_context WHERE phone_number=%s", (phone_number,))
     conn.commit()
 
 

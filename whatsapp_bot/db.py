@@ -91,4 +91,20 @@ def ensure_whatsapp_tables(conn: PgConnection):
         )
         """
     )
+    # Short-term conversational context, keyed by phone number, with a short
+    # expiry — same pattern as whatsapp_pending_actions. Lets a follow-up
+    # like "details of that order" resolve without re-asking. See
+    # tools.py's store_context/get_context.
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS whatsapp_context (
+            id SERIAL PRIMARY KEY,
+            phone_number TEXT NOT NULL,
+            last_order_id INTEGER,
+            last_customer_name TEXT,
+            created_at TIMESTAMP NOT NULL DEFAULT now(),
+            expires_at TIMESTAMP NOT NULL
+        )
+        """
+    )
     conn.commit()

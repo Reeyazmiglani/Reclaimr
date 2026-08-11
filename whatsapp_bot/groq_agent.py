@@ -27,11 +27,17 @@ READ_TOOL_SCHEMAS = [
         "type": "function",
         "function": {
             "name": "get_order_status",
-            "description": "Look up the status, product, quantity and dispatch date of a customer's order(s).",
+            "description": "Look up the status, product, quantity and dispatch date of a customer's order(s). "
+                            "If the user refers back to a specific order from recent context ('that order', "
+                            "'it', 'the same one') and the context note gives you an order number, pass "
+                            "order_id instead of customer_name.",
             "parameters": {
                 "type": "object",
-                "properties": {"customer_name": {"type": "string", "description": "Customer name, full or partial"}},
-                "required": ["customer_name"],
+                "properties": {
+                    "customer_name": {"type": "string", "description": "Customer name, full or partial"},
+                    "order_id": {"type": "integer", "description": "Specific order number, if known (e.g. from recent context or '#47')"},
+                },
+                "required": [],
             },
         },
     },
@@ -123,18 +129,49 @@ READ_TOOL_SCHEMAS = [
 ]
 
 
-def run_agent(conn, user_text: str):
+def _context_note(context: dict) -> str:
+    """Builds a short addendum to the system prompt describing recent
+    conversational context (last order/customer discussed), so the model
+    can resolve references like "that order" / "it" / "the same one"
+    instead of re-asking. Returns "" if there's nothing usable."""
+    if not context:
+        return ""
+    parts = []
+    if context.get("last_order_id") is not None:
+        parts.append(f"order #{context['last_order_id']}")
+    if context.get("last_customer_name"):
+        parts.append(f"customer '{context['last_customer_name']}'")
+    if not parts:
+        return ""
+    return (
+        f"\n\nRecent context (expires after a few minutes of inactivity): the last thing discussed "
+        f"with this user was {' / '.join(parts)}. If their new message refers back to it vaguely "
+        "(e.g. 'that order', 'it', 'the same one', 'him/her') and doesn't name a different order or "
+        "customer, use this context — pass order_id (or the customer_name) from it directly instead "
+        "of asking the user to repeat themselves. If the message clearly names something else, or "
+        "there genuinely is no usable context above, ask for clarification as usual."
+    )
+
+
+def run_agent(conn, user_text: str, phone: str = None):
     """Runs one turn of the tool-calling loop. Returns (reply_text, pending_write)
     where pending_write is None for read-only turns, or a dict describing a
     write action that needs confirmation: {"action_type", "payload", "summary"}
-    or {"clarify": "..."} if the match was ambiguous/not found."""
+    or {"clarify": "..."} if the match was ambiguous/not found.
+
+    `phone` is used to load/store short-term conversational context (last
+    order/customer discussed) so follow-ups like "details of that order"
+    resolve without re-asking — see tools.store_context/get_context."""
     api_key = os.getenv("GROQ_API_KEY", "")
     if not api_key:
         return "The bot isn't configured yet (missing GROQ_API_KEY).", None
 
+    context = tools.get_context(conn, phone) if phone else None
+    system_prompt = _SYSTEM_PROMPT + _context_note(context)
+
     client = Groq(api_key=api_key)
     messages = [
-        {"role": "system", "content": _SYSTEM_PROMPT},
+        {"role": "system", "content": system_prompt},
         {"role": "user", "content": user_text},
     ]
 
@@ -160,22 +197,49 @@ def run_agent(conn, user_text: str):
     except json.JSONDecodeError:
         args = {}
 
+    new_last_order_id = None
+    new_last_customer_name = None
+
     if name == "get_order_status":
-        result = tools.get_order_status(conn, args.get("customer_name", ""))
+        order_id = args.get("order_id")
+        if order_id is not None:
+            row = tools.get_order_by_id(conn, order_id)
+            if row is None:
+                result = f"No order found with number #{order_id}."
+            else:
+                result = tools.get_order_status_by_id(conn, order_id)
+                new_last_order_id, new_last_customer_name = row["id"], row["customer_name"]
+        elif args.get("customer_name"):
+            customer_name = args["customer_name"]
+            rows = tools.find_orders_by_customer(conn, customer_name)
+            result = tools.get_order_status(conn, customer_name)
+            if len(rows) == 1:
+                new_last_order_id, new_last_customer_name = rows[0]["id"], rows[0]["customer_name"]
+            elif rows:
+                new_last_customer_name = customer_name
+        else:
+            result = ("I don't have enough context to know which order you mean — "
+                       "can you give the order number or customer name?")
     elif name == "get_vendor_price_history":
         result = tools.get_vendor_price_history(conn, args.get("vendor", ""), args.get("material", ""))
     elif name == "get_receivables_status":
-        result = tools.get_receivables_status(conn, args.get("customer_name", ""))
+        customer_name = args.get("customer_name", "")
+        result = tools.get_receivables_status(conn, customer_name)
+        if customer_name:
+            new_last_customer_name = customer_name
     elif name == "get_daily_actions":
         result = tools.get_daily_actions(conn)
     elif name == "get_revenue_summary":
         result = tools.get_revenue_summary(conn, args.get("month"), args.get("entity"))
     elif name == "update_order_status_lookup":
-        return _resolve_order_status_update(conn, args)
+        return _resolve_order_status_update(conn, args, phone)
     elif name == "log_production_lookup":
         return _resolve_log_production(conn, args)
     else:
         result = "I don't have a tool for that yet."
+
+    if phone:
+        tools.store_context(conn, phone, new_last_order_id, new_last_customer_name)
 
     # Feed the tool result back so the model can phrase a natural reply.
     messages.append({"role": "assistant", "content": None, "tool_calls": [call]})
@@ -186,7 +250,7 @@ def run_agent(conn, user_text: str):
     return (follow_up.choices[0].message.content or result).strip(), None
 
 
-def _resolve_order_status_update(conn, args):
+def _resolve_order_status_update(conn, args, phone: str = None):
     order_id = args.get("order_id")
     customer_name = args.get("customer_name")
     new_status = args.get("new_status", "").strip()
@@ -200,13 +264,27 @@ def _resolve_order_status_update(conn, args):
             f"#{m['id']} ({m['quantity']} {m['quantity_unit']} {m['product']}, currently {m['status']})"
             for m in matches
         )
-        return f"Found {len(matches)} matching orders — which one? {options}", None
+        if phone:
+            tools.store_context(conn, phone, last_customer_name=customer_name)
+        summary = f"Found {len(matches)} matching orders — which one? {options}"
+        # Remember the intent (new_status + candidates) as a pending
+        # clarification, so a follow-up naming one of the order numbers
+        # resolves straight to the YES-confirm step — see main.py's
+        # handle_message, which checks for this action_type first.
+        pending = {
+            "action_type": "clarify_order_status",
+            "payload": {"new_status": new_status, "candidate_ids": [m["id"] for m in matches]},
+            "summary": summary,
+        }
+        return summary, pending
 
     m = matches[0]
     summary = (
         f"Order #{m['id']}, {m['customer_name']}, {m['quantity']} {m['quantity_unit']} {m['product']} "
         f"→ marking as {new_status}. Reply YES to confirm."
     )
+    if phone:
+        tools.store_context(conn, phone, last_order_id=m["id"], last_customer_name=m["customer_name"])
     pending = {
         "action_type": "update_order_status",
         "payload": {"order_id": m["id"], "new_status": new_status},

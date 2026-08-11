@@ -5,6 +5,7 @@ Streamlit app) but pointed at the SAME Postgres database via DATABASE_URL.
 See README section "WhatsApp bot service" for deployment notes.
 """
 import os
+import re
 from fastapi import FastAPI, Request, Response
 from dotenv import load_dotenv
 
@@ -88,19 +89,55 @@ def handle_message(conn, phone: str, text: str) -> str:
     unit-tested without a live HTTP request."""
     pending = tools.get_pending_action(conn, phone)
     if pending:
-        if tools.is_affirmative(text):
+        if pending["action_type"] == "clarify_order_status":
+            # Ambiguous-match follow-up: did the user's reply name one of
+            # the candidate order numbers we offered? If so, go straight
+            # to the normal YES-confirm step instead of re-running the
+            # agent from scratch (which would have no memory of the
+            # original "mark as X" intent).
+            order_id = _extract_candidate_order_id(text, pending["payload"]["candidate_ids"])
+            if order_id is not None:
+                return _resolve_clarified_order_status(conn, phone, order_id, pending["payload"]["new_status"])
+            tools.clear_pending_action(conn, phone)
+        elif tools.is_affirmative(text):
             return _execute_pending(conn, phone, pending)
-        # Anything else cancels the stale pending action and is treated as
-        # a fresh message rather than silently ignored.
-        tools.clear_pending_action(conn, phone)
+        else:
+            # Anything else cancels the stale pending action and is treated
+            # as a fresh message rather than silently ignored.
+            tools.clear_pending_action(conn, phone)
 
-    reply, pending_write = groq_agent.run_agent(conn, text)
+    reply, pending_write = groq_agent.run_agent(conn, text, phone=phone)
     if pending_write and "clarify" not in pending_write:
         tools.store_pending_action(
             conn, phone,
             pending_write["action_type"], pending_write["payload"], pending_write["summary"],
         )
     return reply
+
+
+def _extract_candidate_order_id(text: str, candidate_ids: list):
+    """Pulls a number out of a free-text reply (e.g. "order #9", "9", "the
+    9") and returns it only if it's one of the offered candidates."""
+    for n in re.findall(r"\d+", text):
+        n = int(n)
+        if n in candidate_ids:
+            return n
+    return None
+
+
+def _resolve_clarified_order_status(conn, phone: str, order_id: int, new_status: str) -> str:
+    m = tools.get_order_by_id(conn, order_id)
+    if not m:
+        tools.clear_pending_action(conn, phone)
+        return f"I couldn't find order #{order_id} anymore — can you double-check?"
+    summary = (
+        f"Order #{m['id']}, {m['customer_name']}, {m['quantity']} {m['quantity_unit']} {m['product']} "
+        f"→ marking as {new_status}. Reply YES to confirm."
+    )
+    tools.store_pending_action(conn, phone, "update_order_status",
+                                {"order_id": m["id"], "new_status": new_status}, summary)
+    tools.store_context(conn, phone, last_order_id=m["id"], last_customer_name=m["customer_name"])
+    return summary
 
 
 def _execute_pending(conn, phone: str, pending: dict) -> str:
