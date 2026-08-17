@@ -26,9 +26,11 @@ require_auth(_get_conn())
 render_logout_button()
 
 # ─────────────────────────────────────────────────────────────────────────────
-# FY 2024-25 DATA
+# FY DATA — loaded from financial_snapshots (see db/schema.py + Part 1/2 of
+# the statement-import pipeline). This FY2024-25 dict is kept only as the
+# fallback shown before any statement has been imported for a company.
 # ─────────────────────────────────────────────────────────────────────────────
-FY25 = {
+_FY25_FALLBACK = {
     "Rwox": {
         "sales":        15_451_424,
         "gross_profit":  2_682_594,
@@ -48,6 +50,60 @@ FY25 = {
         "total_assets":  6_372_835,
     },
 }
+
+
+def _fy_label(snapshot_date: str) -> str:
+    """'2025-03-31' -> 'FY 2024-25' (Indian FY convention, year ending 31 Mar)."""
+    try:
+        y = int(snapshot_date[:4])
+        return f"FY {y-1}-{str(y)[2:]}"
+    except (ValueError, TypeError):
+        return snapshot_date or "Unknown"
+
+
+def _available_years(conn) -> list[str]:
+    """All distinct snapshot_date values across both companies, newest first."""
+    rows = conn.execute(
+        "SELECT DISTINCT snapshot_date FROM financial_snapshots ORDER BY snapshot_date DESC"
+    ).fetchall()
+    return [r["snapshot_date"] for r in rows]
+
+
+def _load_fy_data(conn, year: str | None) -> dict:
+    """Returns the FY25-shaped dict {company: {sales, gross_profit, ...}}
+    for the requested snapshot_date (exact match), or each company's own
+    latest snapshot when `year` is None. Falls back to the static
+    illustrative dataset for any company with nothing imported yet."""
+    out = {}
+    for co in ("Rwox", "Elastohorse"):
+        row = None
+        if year:
+            row = conn.execute(
+                "SELECT fs.* FROM financial_snapshots fs JOIN companies c ON fs.company_id=c.id "
+                "WHERE c.name=%s AND fs.snapshot_date=%s", (co, year)
+            ).fetchone()
+        if row is None:
+            row = conn.execute(
+                "SELECT fs.* FROM financial_snapshots fs JOIN companies c ON fs.company_id=c.id "
+                "WHERE c.name=%s ORDER BY fs.snapshot_date DESC LIMIT 1", (co,)
+            ).fetchone()
+        if row is None or row["sales"] is None:
+            out[co] = dict(_FY25_FALLBACK[co])
+            out[co]["_source"] = "illustrative (no statement imported yet)"
+            continue
+        out[co] = {
+            "sales":        row["sales"] or 0,
+            "gross_profit": row["gross_profit"] or 0,
+            "net_profit":   row["net_profit"] or 0,
+            "cash_bank":    row["cash_balance"] or 0,
+            "stock":        row["closing_stock"] or 0,
+            "debtors":      row["receivables"] or 0,
+            "total_assets": row["total_assets"] or 0,
+            "_source": f"{_fy_label(row['snapshot_date'])} ({row['source_file'] or 'manual entry'})",
+            "_snapshot_date": row["snapshot_date"],
+        }
+    return out
+
 
 EXPENSES = {
     "Rwox": [
@@ -366,16 +422,16 @@ def _group_bs(items):
 # ─────────────────────────────────────────────────────────────────────────────
 # SECTION 1 — ANNUAL OVERVIEW
 # ─────────────────────────────────────────────────────────────────────────────
-def _tab_snapshot(company: str) -> None:
-    st.subheader("FY 2024-25 at a Glance")
+def _tab_snapshot(company: str, fy_data: dict, year_label: str) -> None:
+    st.subheader(f"{year_label} at a Glance")
     st.caption("Full-year results. Use this to benchmark monthly performance and understand where margins stand.")
 
     companies = ["Rwox", "Elastohorse"] if company == "both" else [company]
     cols = st.columns(len(companies))
 
     for col, co in zip(cols, companies):
-        d  = FY25[co]
-        nm = d["net_profit"] / d["sales"] * 100
+        d  = fy_data[co]
+        nm = d["net_profit"] / d["sales"] * 100 if d["sales"] else 0
         debtor_html = (
             f"<p style='color:{_RED};margin:6px 0'>⚠️ Customers owe us "
             f"<b>{_inr(d['debtors'])}</b>, check if any is overdue</p>"
@@ -396,15 +452,16 @@ def _tab_snapshot(company: str) -> None:
                 f"{debtor_html}"
                 f"<p style='color:#8B6A45;margin:6px 0'>📦 Unsold stock in warehouse: "
                 f"{_inr(d['stock'])}</p>"
+                f"<p style='color:#B0A08A;font-size:11px;margin:10px 0 0 0'>Source: {d.get('_source','—')}</p>"
                 f"</div>",
                 unsafe_allow_html=True,
             )
 
     if company == "both":
-        t_s = FY25["Rwox"]["sales"]      + FY25["Elastohorse"]["sales"]
-        t_p = FY25["Rwox"]["net_profit"] + FY25["Elastohorse"]["net_profit"]
-        t_c = FY25["Rwox"]["cash_bank"]  + FY25["Elastohorse"]["cash_bank"]
-        cnm = t_p / t_s * 100
+        t_s = fy_data["Rwox"]["sales"]      + fy_data["Elastohorse"]["sales"]
+        t_p = fy_data["Rwox"]["net_profit"] + fy_data["Elastohorse"]["net_profit"]
+        t_c = fy_data["Rwox"]["cash_bank"]  + fy_data["Elastohorse"]["cash_bank"]
+        cnm = t_p / t_s * 100 if t_s else 0
         st.markdown(
             f"<div style='background:#FFF0DC;border-radius:12px;padding:22px 24px;"
             f"border:1px solid #E8D5B7;margin-bottom:16px'>"
@@ -425,9 +482,9 @@ def _tab_snapshot(company: str) -> None:
     metric_cos = ["Rwox", "Elastohorse"] if company == "both" else [company]
     mcols = st.columns(len(metric_cos) * 2)
     for i, co in enumerate(metric_cos):
-        d  = FY25[co]
-        nm = d["net_profit"] / d["sales"] * 100
-        gm = d["gross_profit"] / d["sales"] * 100
+        d  = fy_data[co]
+        nm = d["net_profit"] / d["sales"] * 100 if d["sales"] else 0
+        gm = d["gross_profit"] / d["sales"] * 100 if d["sales"] else 0
         mcols[i*2].metric(f"{co} Net Margin",   f"{nm:.1f}%",
                           help="% of sales kept as profit after ALL expenses")
         mcols[i*2+1].metric(f"{co} Gross Margin", f"{gm:.1f}%",
@@ -437,15 +494,20 @@ def _tab_snapshot(company: str) -> None:
 # ─────────────────────────────────────────────────────────────────────────────
 # SECTION 2 — EXPENSE BREAKDOWN
 # ─────────────────────────────────────────────────────────────────────────────
-def _tab_expenses(company: str, kp: str) -> None:
+def _tab_expenses(company: str, kp: str, fy_data: dict, year_label: str) -> None:
     st.subheader("Expense Breakdown")
     st.caption("Where every rupee of revenue is going. Any category above 40% is flagged.")
+    st.caption(
+        f"⚠️ Category-level detail below is only available for FY 2024-25 — statement imports "
+        f"currently capture summary totals (sales/purchases/profit), not an itemised expense list. "
+        f"Viewing {year_label}; the summary numbers above/elsewhere on this page match the selected year."
+    )
 
     companies = ["Rwox", "Elastohorse"] if company == "both" else [company]
     cols = st.columns(len(companies))
 
     for col, co in zip(cols, companies):
-        sales    = FY25[co]["sales"]
+        sales    = fy_data[co]["sales"] or _FY25_FALLBACK[co]["sales"]
         exp_list = EXPENSES[co]
         with col:
             st.markdown(f"#### {co}")
@@ -509,22 +571,22 @@ def _hrow_single(emoji, title, txt, clr, action=None):
     st.markdown("<br>", unsafe_allow_html=True)
 
 
-def _tab_health(company: str) -> None:
+def _tab_health(company: str, fy_data: dict) -> None:
     st.subheader("Health Check")
     st.caption("Five indicators showing whether the business is within healthy parameters.")
 
-    r = FY25["Rwox"];  e = FY25["Elastohorse"]
-    r_nm = r["net_profit"] / r["sales"] * 100
-    e_nm = e["net_profit"] / e["sales"] * 100
+    r = fy_data["Rwox"];  e = fy_data["Elastohorse"]
+    r_nm = r["net_profit"] / r["sales"] * 100 if r["sales"] else 0
+    e_nm = e["net_profit"] / e["sales"] * 100 if e["sales"] else 0
     r_me = (r["sales"] - r["net_profit"]) / 12
     e_me = (e["sales"] - e["net_profit"]) / 12
-    r_sm = r["stock"] / (r["sales"] / 12)
-    e_sm = e["stock"] / (e["sales"] / 12)
+    r_sm = r["stock"] / (r["sales"] / 12) if r["sales"] else 0
+    e_sm = e["stock"] / (e["sales"] / 12) if e["sales"] else 0
     r_ok = r["cash_bank"] >= r_me
     e_ok = e["cash_bank"] >= e_me
     r_sw = r_sm > 2;  e_sw = e_sm > 2
     e_loan = 313_895 / 0.15
-    e_lp   = e_loan / e["total_assets"] * 100
+    e_lp   = e_loan / e["total_assets"] * 100 if e["total_assets"] else 0
     loan_bad = e_lp > 50
 
     if company == "both":
@@ -780,10 +842,12 @@ def _tab_upload(conn, kp: str, default_company: str = "Rwox") -> None:
     if uploaded:
         ext = uploaded.name.rsplit(".", 1)[-1].lower()
 
+        parsed_stmt = None
         if ext == "pdf":
             try:
                 import pdfplumber, io
-                with pdfplumber.open(io.BytesIO(uploaded.read())) as pdf:
+                raw_bytes = uploaded.read()
+                with pdfplumber.open(io.BytesIO(raw_bytes)) as pdf:
                     full_text = "\n".join(p.extract_text() or "" for p in pdf.pages)
                 if full_text.strip():
                     stmt_type  = _detect_stmt_type(full_text)
@@ -800,6 +864,31 @@ def _tab_upload(conn, kp: str, default_company: str = "Rwox") -> None:
                     extracted["payables"]    = _fa(["creditors","payable","sundry creditor"])
                     extracted["equity"]      = _fa(["capital","net worth","equity"])
 
+                    # Full Tally-layout extraction (same parser used for the
+                    # historical bulk import) — reads via word positions
+                    # rather than raw text, so it's far more reliable for
+                    # this specific document family. Overlays the simpler
+                    # extraction above wherever it finds a value.
+                    try:
+                        from utils.statement_parser import parse_pdf as _parse_full
+                        parsed_stmt = _parse_full(io.BytesIO(raw_bytes), source_name=uploaded.name)
+                        field_map = {
+                            "cash_bank": parsed_stmt.cash_bank, "receivables": parsed_stmt.sundry_debtors,
+                            "payables": parsed_stmt.sundry_creditors, "equity": parsed_stmt.capital_account,
+                        }
+                        for k, v in field_map.items():
+                            if v is not None:
+                                extracted[k] = v
+                        for k in ("loans", "fixed_assets", "closing_stock", "sales", "purchases",
+                                  "gross_profit", "net_profit", "total_liabilities", "total_assets"):
+                            extracted[k] = getattr(parsed_stmt, k)
+                        if parsed_stmt.statement_date:
+                            extracted["statement_date"] = parsed_stmt.statement_date
+                        if parsed_stmt.company:
+                            extracted["company"] = parsed_stmt.company
+                    except Exception:
+                        pass  # fall back silently to the simple line-item extraction above
+
                     with st.expander("Raw text from PDF (first 1 500 chars)"):
                         st.text(full_text[:1500])
                 else:
@@ -808,6 +897,21 @@ def _tab_upload(conn, kp: str, default_company: str = "Rwox") -> None:
                 st.warning("pdfplumber not installed. Run `pip install pdfplumber` to enable auto-extraction.")
             except Exception as exc:
                 st.error(f"Could not read PDF: {exc}")
+
+            if parsed_stmt is not None:
+                if parsed_stmt.is_balanced is True:
+                    st.success(
+                        f"Balance sheet totals matched: Liabilities and Assets both "
+                        f"{_inr(parsed_stmt.total_liabilities)} ✅"
+                    )
+                elif parsed_stmt.is_balanced is False:
+                    st.error(
+                        f"⚠️ Total Liabilities ({_inr(parsed_stmt.total_liabilities or 0)}) doesn't match "
+                        f"Total Assets ({_inr(parsed_stmt.total_assets or 0)}) — double-check the numbers "
+                        f"below before saving; something was likely misread."
+                    )
+                for w in parsed_stmt.warnings:
+                    st.warning(w)
 
         elif ext in ("xlsx", "xls"):
             try:
@@ -892,27 +996,54 @@ def _tab_upload(conn, kp: str, default_company: str = "Rwox") -> None:
             st.divider()
             st.markdown("**Confirm the key numbers and save to the database:**")
             co_opts   = ["Rwox", "Elastohorse"]
-            co_idx    = co_opts.index(default_company) if default_company in co_opts else 0
+            default_pick = extracted.get("company") if extracted.get("company") in co_opts else default_company
+            co_idx    = co_opts.index(default_pick) if default_pick in co_opts else 0
+            try:
+                default_date = date.fromisoformat(extracted["statement_date"]) \
+                    if extracted.get("statement_date") else date.today()
+            except ValueError:
+                default_date = date.today()
 
             with st.form(f"{kp}_confirm_upload_form"):
                 co_choice = st.selectbox("Which company is this for?", co_opts, index=co_idx,
                                          key=f"{kp}_up_co")
-                snap_date = st.date_input("Statement date", value=date.today(), key=f"{kp}_up_date")
+                snap_date = st.date_input("Statement date", value=default_date, key=f"{kp}_up_date")
                 nc1, nc2 = st.columns(2)
                 with nc1:
                     cash_in = st.number_input("Cash in bank (₹)", min_value=0.0,
-                        value=float(extracted.get("cash_bank", 0)),
+                        value=float(extracted.get("cash_bank") or 0),
                         step=1_000.0, format="%.0f", key=f"{kp}_up_cash")
                     recv    = st.number_input("Customers owe us: Debtors (₹)", min_value=0.0,
-                        value=float(extracted.get("receivables", 0)),
+                        value=float(extracted.get("receivables") or 0),
                         step=1_000.0, format="%.0f", key=f"{kp}_up_recv")
+                    loans_v = st.number_input("Loans (secured + unsecured) (₹)", min_value=0.0,
+                        value=float(extracted.get("loans") or 0),
+                        step=1_000.0, format="%.0f", key=f"{kp}_up_loans")
+                    fixed_v = st.number_input("Fixed assets (₹)", min_value=0.0,
+                        value=float(extracted.get("fixed_assets") or 0),
+                        step=1_000.0, format="%.0f", key=f"{kp}_up_fixed")
+                    stock_v = st.number_input("Closing stock (₹)", min_value=0.0,
+                        value=float(extracted.get("closing_stock") or 0),
+                        step=1_000.0, format="%.0f", key=f"{kp}_up_stock")
                 with nc2:
                     pay  = st.number_input("We owe vendors: Creditors (₹)", min_value=0.0,
-                        value=float(extracted.get("payables", 0)),
+                        value=float(extracted.get("payables") or 0),
                         step=1_000.0, format="%.0f", key=f"{kp}_up_pay")
                     eq   = st.number_input("Net worth / equity (₹)", min_value=0.0,
-                        value=float(extracted.get("equity", 0)),
+                        value=float(extracted.get("equity") or 0),
                         step=1_000.0, format="%.0f", key=f"{kp}_up_eq")
+                    sales_v = st.number_input("Sales (₹)", min_value=0.0,
+                        value=float(extracted.get("sales") or 0),
+                        step=1_000.0, format="%.0f", key=f"{kp}_up_sales")
+                    purch_v = st.number_input("Purchases (₹)", min_value=0.0,
+                        value=float(extracted.get("purchases") or 0),
+                        step=1_000.0, format="%.0f", key=f"{kp}_up_purch")
+                    gp_v = st.number_input("Gross profit (₹)", min_value=0.0,
+                        value=float(extracted.get("gross_profit") or 0),
+                        step=1_000.0, format="%.0f", key=f"{kp}_up_gp")
+                    np_v = st.number_input("Net profit (₹)", min_value=0.0,
+                        value=float(extracted.get("net_profit") or 0),
+                        step=1_000.0, format="%.0f", key=f"{kp}_up_np")
                 doc_notes = st.text_area("Notes", value=f"Uploaded: {uploaded.name}",
                                          key=f"{kp}_up_notes")
                 save_btn  = st.form_submit_button("Save to Database", type="primary")
@@ -920,13 +1051,34 @@ def _tab_upload(conn, kp: str, default_company: str = "Rwox") -> None:
             if save_btn:
                 row = conn.execute("SELECT id FROM companies WHERE name=%s", (co_choice,)).fetchone()
                 if row:
+                    total_liab = extracted.get("total_liabilities")
+                    total_ass  = extracted.get("total_assets")
+                    is_bal     = (abs(total_liab - total_ass) < 2.0) if (total_liab and total_ass) else None
                     conn.execute(
-                        "INSERT INTO financial_snapshots "
-                        "(company_id,snapshot_date,cash_balance,receivables,payables,equity,notes) "
-                        "VALUES (%s,%s,%s,%s,%s,%s,%s)",
-                        (row["id"], snap_date.isoformat(), cash_in, recv, pay, eq, doc_notes))
+                        """
+                        INSERT INTO financial_snapshots
+                            (company_id, snapshot_date, cash_balance, receivables, payables, equity,
+                             loans, fixed_assets, closing_stock, sales, purchases, gross_profit,
+                             net_profit, total_liabilities, total_assets, is_balanced, source_file, notes)
+                        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                        ON CONFLICT (company_id, snapshot_date) DO UPDATE SET
+                            cash_balance=EXCLUDED.cash_balance, receivables=EXCLUDED.receivables,
+                            payables=EXCLUDED.payables, equity=EXCLUDED.equity, loans=EXCLUDED.loans,
+                            fixed_assets=EXCLUDED.fixed_assets, closing_stock=EXCLUDED.closing_stock,
+                            sales=EXCLUDED.sales, purchases=EXCLUDED.purchases,
+                            gross_profit=EXCLUDED.gross_profit, net_profit=EXCLUDED.net_profit,
+                            total_liabilities=EXCLUDED.total_liabilities, total_assets=EXCLUDED.total_assets,
+                            is_balanced=EXCLUDED.is_balanced, source_file=EXCLUDED.source_file,
+                            notes=EXCLUDED.notes
+                        """,
+                        (row["id"], snap_date.isoformat(), cash_in, recv, pay, eq,
+                         loans_v, fixed_v, stock_v, sales_v, purch_v, gp_v, np_v,
+                         total_liab, total_ass, is_bal, uploaded.name, doc_notes),
+                    )
                     conn.commit()
-                    st.success(f"Snapshot saved for {co_choice} as of {snap_date}.")
+                    st.success(f"Snapshot saved for {co_choice} as of {snap_date}. "
+                               f"It'll show up as the latest year in Annual Overview / Health Check "
+                               f"if it's the newest statement_date for that company.")
 
     snaps = conn.execute(
         "SELECT fs.*,c.name AS company FROM financial_snapshots fs "
@@ -960,24 +1112,23 @@ _SYSTEM_PROMPT = (
 )
 
 
-def _build_context(company: str) -> str:
+def _build_context(company: str, fy_data: dict) -> str:
     parts = []
     if company in ("both", "Rwox"):
-        r    = FY25["Rwox"]
-        r_nm = r["net_profit"] / r["sales"] * 100
-        r_sm = r["stock"]      / (r["sales"] / 12)
+        r    = fy_data["Rwox"]
+        r_nm = r["net_profit"] / r["sales"] * 100 if r["sales"] else 0
+        r_sm = r["stock"]      / (r["sales"] / 12) if r["sales"] else 0
         parts.append(
             f"Rwox (manufactures rubber reclaiming products):\n"
             f"  Annual sales:  ₹{r['sales']:,.0f}\n"
             f"  Net profit:    ₹{r['net_profit']:,.0f}  ({r_nm:.1f}% margin)\n"
             f"  Cash in bank:  ₹{r['cash_bank']:,.0f}\n"
             f"  Unsold stock:  ₹{r['stock']:,.0f}  ({r_sm:.1f} months of stock)\n"
-            f"  Biggest cost:  Raw materials ₹{10_601_525:,.0f} (69% of revenue)\n"
         )
     if company in ("both", "Elastohorse"):
-        e    = FY25["Elastohorse"]
-        e_nm = e["net_profit"] / e["sales"] * 100
-        e_sm = e["stock"]      / (e["sales"] / 12)
+        e    = fy_data["Elastohorse"]
+        e_nm = e["net_profit"] / e["sales"] * 100 if e["sales"] else 0
+        e_sm = e["stock"]      / (e["sales"] / 12) if e["sales"] else 0
         parts.append(
             f"Elastohorse (trades rubber and related goods):\n"
             f"  Annual sales:  ₹{e['sales']:,.0f}\n"
@@ -985,7 +1136,6 @@ def _build_context(company: str) -> str:
             f"  Cash in bank:  ₹{e['cash_bank']:,.0f}\n"
             f"  Customers owe: ₹{e['debtors']:,.0f}\n"
             f"  Unsold stock:  ₹{e['stock']:,.0f}  ({e_sm:.1f} months)\n"
-            f"  Loan interest: ₹{313_895:,.0f}/year (implies significant borrowing)\n"
         )
     return "Business: Reclaimr, Indian manufacturing and trading group\n\n" + "\n".join(parts)
 
@@ -1016,7 +1166,7 @@ def _advice_box(label: str, text: str) -> None:
         f"</p></div>", unsafe_allow_html=True)
 
 
-def _tab_ai(company: str, kp: str) -> None:
+def _tab_ai(company: str, kp: str, fy_data: dict) -> None:
     co_label = company if company != "both" else "both companies"
     st.subheader("AI Business Advisor")
     st.caption(f"A structured assessment of {co_label} based on your data, with one prioritised action for the week.")
@@ -1027,7 +1177,7 @@ def _tab_ai(company: str, kp: str) -> None:
         return
 
     if st.button("Analyse My Business 🤖", type="primary", use_container_width=True, key=f"{kp}_ai_btn"):
-        context = _build_context(company)
+        context = _build_context(company, fy_data)
         prompt  = (
             f"Based on the financial data below, write exactly 3 short paragraphs "
             f"(no headers or bullets, plain paragraphs only):\n"
@@ -1054,7 +1204,7 @@ def _tab_ai(company: str, kp: str) -> None:
         placeholder="e.g. Should I hire another worker for Rwox right now?",
         label_visibility="collapsed", key=f"{kp}_ai_q")
     if st.button("Ask 🤖", disabled=not question.strip(), key=f"{kp}_ai_ask"):
-        context = _build_context(company)
+        context = _build_context(company, fy_data)
         prompt  = (
             f"Financial context:\n{context}\n\n"
             f"Owner asks: {question.strip()}\n\n"
@@ -1074,6 +1224,18 @@ def _tab_ai(company: str, kp: str) -> None:
 # ─────────────────────────────────────────────────────────────────────────────
 def _render_view(conn, company: str, kp: str) -> None:
     default_co = company if company != "both" else "Rwox"
+
+    years = _available_years(conn)
+    year_choice = None
+    if years:
+        labels = [f"{_fy_label(y)} (latest)" if y == years[0] else _fy_label(y) for y in years]
+        picked = st.selectbox("Year", labels, index=0, key=f"{kp}_year_select",
+                               label_visibility="collapsed")
+        year_choice = years[labels.index(picked)]
+    fy_data = _load_fy_data(conn, year_choice)
+    year_label = _fy_label(year_choice) if year_choice else _fy_label(
+        fy_data[default_co].get("_snapshot_date", ""))
+
     inner = st.tabs([
         "📊 Annual Overview",
         "💸 Expense Breakdown",
@@ -1082,12 +1244,12 @@ def _render_view(conn, company: str, kp: str) -> None:
         "📄 Upload Statements",
         "🤖 AI Advisor",
     ])
-    with inner[0]: _tab_snapshot(company)
-    with inner[1]: _tab_expenses(company, kp)
-    with inner[2]: _tab_health(company)
+    with inner[0]: _tab_snapshot(company, fy_data, year_label)
+    with inner[1]: _tab_expenses(company, kp, fy_data, year_label)
+    with inner[2]: _tab_health(company, fy_data)
     with inner[3]: _tab_monthly(conn, company, kp)
     with inner[4]: _tab_upload(conn, kp, default_co)
-    with inner[5]: _tab_ai(company, kp)
+    with inner[5]: _tab_ai(company, kp, fy_data)
 
 
 _LOGO_HTML = (

@@ -248,10 +248,43 @@ def migrate_db(conn) -> None:
         "ALTER TABLE production_logs ADD COLUMN IF NOT EXISTS total_batch_cost REAL",
         "ALTER TABLE production_logs ADD COLUMN IF NOT EXISTS cost_per_kg REAL",
         "ALTER TABLE receivables ADD COLUMN IF NOT EXISTS last_contacted TEXT",
+        # financial_snapshots: extended from the original 4-field shape
+        # (cash_balance/receivables/payables/equity) to hold a full parsed
+        # Balance Sheet + Trading/P&L statement, so Financial Pulse can read
+        # real historical data per company per year instead of one hardcoded
+        # FY. cash_balance/receivables/payables/equity keep their original
+        # meaning (cash & bank / sundry debtors / sundry creditors / capital
+        # account) so existing manual-entry code paths keep working.
+        "ALTER TABLE financial_snapshots ADD COLUMN IF NOT EXISTS loans REAL",
+        "ALTER TABLE financial_snapshots ADD COLUMN IF NOT EXISTS fixed_assets REAL",
+        "ALTER TABLE financial_snapshots ADD COLUMN IF NOT EXISTS closing_stock REAL",
+        "ALTER TABLE financial_snapshots ADD COLUMN IF NOT EXISTS sales REAL",
+        "ALTER TABLE financial_snapshots ADD COLUMN IF NOT EXISTS purchases REAL",
+        "ALTER TABLE financial_snapshots ADD COLUMN IF NOT EXISTS gross_profit REAL",
+        "ALTER TABLE financial_snapshots ADD COLUMN IF NOT EXISTS net_profit REAL",
+        "ALTER TABLE financial_snapshots ADD COLUMN IF NOT EXISTS total_liabilities REAL",
+        "ALTER TABLE financial_snapshots ADD COLUMN IF NOT EXISTS total_assets REAL",
+        "ALTER TABLE financial_snapshots ADD COLUMN IF NOT EXISTS is_balanced BOOLEAN",
+        "ALTER TABLE financial_snapshots ADD COLUMN IF NOT EXISTS source_file TEXT",
+        # payables/receivables ledger imports (Part 3): track which vendor/
+        # customer ledger a row came from and its original voucher number,
+        # so re-running the importer doesn't create duplicates
+        "ALTER TABLE payables ADD COLUMN IF NOT EXISTS company TEXT",
+        "ALTER TABLE payables ADD COLUMN IF NOT EXISTS voucher_no TEXT",
+        "ALTER TABLE payables ADD COLUMN IF NOT EXISTS source_file TEXT",
+        "ALTER TABLE receivables ADD COLUMN IF NOT EXISTS voucher_no TEXT",
+        "ALTER TABLE receivables ADD COLUMN IF NOT EXISTS source_file TEXT",
+        "ALTER TABLE payments ADD COLUMN IF NOT EXISTS source_file TEXT",
     ]
     cur = conn.cursor()
     for sql in alter_statements:
         cur.execute(sql)
+    # One snapshot per company per statement date — re-importing the same
+    # PDF updates the existing row instead of duplicating it.
+    cur.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_financial_snapshots_co_date "
+        "ON financial_snapshots (company_id, snapshot_date)"
+    )
     conn.commit()
 
 
