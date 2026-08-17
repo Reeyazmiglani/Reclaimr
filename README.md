@@ -64,6 +64,11 @@ confirmed writes, backed by the *same* Postgres database as this app
   matching record, ask the sender to reply YES to confirm, and only then
   write to the database — ambiguous matches trigger a clarifying question
   instead of guessing.
+- Voice notes are transcribed with Groq Whisper (`whisper-large-v3-turbo`,
+  auto-detect language) and fed into the exact same pipeline as typed
+  text, so clarification and confirm-before-write apply the same way. A
+  failed transcription gets a "couldn't understand that voice note" reply
+  instead of silence.
 
 Deploy it on Railway as its own service, with **Root Directory** set to
 `whatsapp_bot/`, pointed at the same Postgres instance. See

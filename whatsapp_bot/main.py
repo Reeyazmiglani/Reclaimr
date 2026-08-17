@@ -12,7 +12,8 @@ from dotenv import load_dotenv
 import db
 import tools
 import groq_agent
-from whatsapp_api import send_text
+from whatsapp_api import send_text, download_media
+from voice import transcribe_audio_bytes
 
 load_dotenv()
 
@@ -56,9 +57,9 @@ async def receive_message(request: Request):
     payload = await request.json()
     conn = get_conn()
 
-    sender_phone, text = _extract_message(payload)
-    if not sender_phone or text is None:
-        # Not a user text message (e.g. a status/delivery callback) — ack and ignore.
+    sender_phone, text, media_id = _extract_message(payload)
+    if not sender_phone or (text is None and media_id is None):
+        # Not a user text/audio message (e.g. a status/delivery callback) — ack and ignore.
         return {"status": "ignored"}
 
     phone_row = conn.execute(
@@ -79,9 +80,25 @@ async def receive_message(request: Request):
         send_text(sender_phone, "Your number is still waiting for approval from the app owner.")
         return {"status": "pending_approval"}
 
+    if media_id is not None:
+        text = _transcribe_voice_note(media_id)
+        if text is None:
+            send_text(sender_phone, "Couldn't understand that voice note, try again or type your message")
+            return {"status": "transcription_failed"}
+
     reply = handle_message(conn, sender_phone, text)
     send_text(sender_phone, reply)
     return {"status": "handled"}
+
+
+def _transcribe_voice_note(media_id: str):
+    """Downloads a voice note via the Graph API media endpoint and
+    transcribes it with Groq Whisper. Returns the transcript, or None if
+    either step failed."""
+    audio_bytes = download_media(media_id)
+    if audio_bytes is None:
+        return None
+    return transcribe_audio_bytes(audio_bytes, filename="voice_note.ogg")
 
 
 def handle_message(conn, phone: str, text: str) -> str:
@@ -157,23 +174,27 @@ def _execute_pending(conn, phone: str, pending: dict) -> str:
 
 
 def _extract_message(payload: dict):
-    """Pulls (sender_phone, text) out of Meta's webhook payload shape.
-    Returns (None, None) for anything that isn't an inbound text message."""
+    """Pulls (sender_phone, text, media_id) out of Meta's webhook payload
+    shape. Exactly one of text/media_id is set for a handled message type
+    (text vs. audio/voice note); both are None for anything else — a
+    status/delivery callback or an unsupported message type (image, etc.)."""
     try:
         entry = payload["entry"][0]
         change = entry["changes"][0]
         value = change["value"]
         messages = value.get("messages")
         if not messages:
-            return None, None
+            return None, None, None
         message = messages[0]
         sender = "+" + message["from"].lstrip("+")
-        if message.get("type") != "text":
-            return sender, None
-        text = message["text"]["body"]
-        return sender, text
+        msg_type = message.get("type")
+        if msg_type == "text":
+            return sender, message["text"]["body"], None
+        if msg_type == "audio":
+            return sender, None, message["audio"]["id"]
+        return sender, None, None
     except (KeyError, IndexError, TypeError):
-        return None, None
+        return None, None, None
 
 
 if __name__ == "__main__":
