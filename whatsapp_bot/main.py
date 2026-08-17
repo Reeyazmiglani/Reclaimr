@@ -12,6 +12,7 @@ from dotenv import load_dotenv
 import db
 import tools
 import groq_agent
+import tally_sync_import
 from whatsapp_api import send_text, download_media
 from voice import transcribe_audio_bytes
 
@@ -19,6 +20,7 @@ load_dotenv()
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 VERIFY_TOKEN = os.getenv("WHATSAPP_VERIFY_TOKEN")
+TALLY_SYNC_SECRET = os.getenv("TALLY_SYNC_SECRET")
 
 app = FastAPI(title="Reclaimr WhatsApp Bot")
 
@@ -31,6 +33,7 @@ def get_conn():
         _conn = db.connect(DATABASE_URL)
         db.ensure_whatsapp_tables(_conn)
         tools.ensure_production_log_table(_conn)
+        tally_sync_import.ensure_tally_sync_table(_conn)
     return _conn
 
 
@@ -89,6 +92,35 @@ async def receive_message(request: Request):
     reply = handle_message(conn, sender_phone, text)
     send_text(sender_phone, reply)
     return {"status": "handled"}
+
+
+@app.post("/tally-sync")
+async def receive_tally_sync(request: Request):
+    """Receives parsed ledger data from the local tally_sync/ script
+    (run manually on Reeyaz's own machine, next to Tally) and writes it
+    into payables/receivables/payments. Never exposes direct DB
+    credentials to that script — this is the only entry point.
+
+    Auth: a shared secret in the X-Tally-Sync-Secret header, since this
+    is a write endpoint with no per-user identity to check the way the
+    WhatsApp webhook has phone-number approval."""
+    if not TALLY_SYNC_SECRET:
+        return Response(status_code=503, content="TALLY_SYNC_SECRET not configured on this service")
+    if request.headers.get("X-Tally-Sync-Secret") != TALLY_SYNC_SECRET:
+        return Response(status_code=401, content="Invalid or missing X-Tally-Sync-Secret header")
+
+    payload = await request.json()
+    conn = get_conn()
+    company = payload.get("company")
+
+    parties = []
+    all_warnings = []
+    for ledger in payload.get("ledgers", []):
+        result = tally_sync_import.reconcile_ledger(conn, company, ledger)
+        all_warnings.extend(result.pop("warnings", []))
+        parties.append(result)
+
+    return {"status": "synced", "parties": parties, "warnings": all_warnings}
 
 
 def _transcribe_voice_note(media_id: str):

@@ -75,3 +75,25 @@ Deploy it on Railway as its own service, with **Root Directory** set to
 `whatsapp_bot/.env.example` for the required environment variables, and
 run `python whatsapp_bot/test_tools.py` to smoke-test the tool functions
 directly against your migrated data before wiring up a live webhook.
+
+Local Tally sync
+-----------------
+
+`tally_sync/` is a standalone script — run manually on Reeyaz's own
+computer, on the same machine/network as Tally, **not** deployed
+anywhere. It talks to Tally's local HTTP gateway (`localhost:9000`) to
+pull outstanding Sundry Debtor/Creditor balances and Purchase/SALE
+GST/Payment/Receipt vouchers since a given date, parses them into the
+same shape `utils/ledger_parser.py` uses for the PDF ledger import, and
+POSTs the result to the deployed whatsapp_bot service's `/tally-sync`
+endpoint (protected by a shared `TALLY_SYNC_SECRET` header) — the script
+itself never holds database credentials.
+
+- No scheduling yet — it's a manual `python tally_sync/sync.py --from-date
+  YYYY-MM-DD` tool until it's been checked against real data.
+- Mismatches between the database's computed net balance and Tally's own
+  stated closing balance for a party are flagged in the printed summary,
+  never silently overwritten.
+- See `tally_sync/.env.example` for setup (Tally URL/company name, the
+  whatsapp_bot service URL, and the shared secret — which must also be
+  set as `TALLY_SYNC_SECRET` on the whatsapp_bot Railway service).
